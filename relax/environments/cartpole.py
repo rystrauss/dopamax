@@ -6,8 +6,11 @@ from chex import dataclass, PRNGKey
 from dm_env import StepType
 
 from relax.environments.environment import EnvState, Environment, TimeStep
+from relax.environments.utils import register
 from relax.spaces import Space, Box, Discrete
 from relax.typing import Action, Observation
+
+_NAME = "CartPole"
 
 
 @dataclass(frozen=True)
@@ -22,6 +25,7 @@ class CartPoleEnvState(EnvState):
         return jnp.array([self.x, self.x_dot, self.theta, self.theta_dot])
 
 
+@register(_NAME)
 @dataclass(frozen=True)
 class CartPole(Environment):
     """The CartPole environment, as defined by Barto, Sutton, and Anderson.
@@ -44,7 +48,7 @@ class CartPole(Environment):
 
     @property
     def name(self) -> str:
-        return "CartPole"
+        return _NAME
 
     @property
     def max_episode_length(self) -> int:

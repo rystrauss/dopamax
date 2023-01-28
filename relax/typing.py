@@ -6,3 +6,5 @@ NumericTree = Numeric | Iterable["NumericTree"] | Mapping[Any, "NumericTree"]
 
 Observation = ArrayTree
 Action = NumericTree
+
+Metrics = Mapping[str, Numeric]

@@ -41,7 +41,7 @@ class WandbCallback(Callback):
         to_log = copy(metrics)
 
         to_log["timesteps"] = train_state.total_timesteps
-        to_log["episodes"] = train_state.total_timesteps
+        to_log["episodes"] = train_state.total_episodes
 
         to_log = jax.tree_map(lambda x: x.item(), to_log)
 

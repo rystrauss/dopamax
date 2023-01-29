@@ -16,8 +16,7 @@ class EnvState:
 
     Each environment should have its own state class that inherits from this class.
     """
-
-    pass
+    episode_reward: float
 
 
 @dataclass(frozen=True)

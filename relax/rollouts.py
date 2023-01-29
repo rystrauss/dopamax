@@ -23,6 +23,7 @@ class SampleBatch(dict):
     POLICY_STATE = "policy_state"
     NEXT_POLICY_STATE = "next_policy_state"
     VALID_MASK = "valid_mask"
+    EPISODE_REWARD = "episode_reward"
 
 
 def rollout_episode(
@@ -64,6 +65,7 @@ def rollout_episode(
             SampleBatch.STEP_TYPE: next_time_step.step_type,
             # TODO: Verify whether this should be valid_mask or next_valid_mask.
             SampleBatch.VALID_MASK: next_valid_mask,
+            SampleBatch.EPISODE_REWARD: next_env_state.episode_reward,
             **policy_info,
         }
 
@@ -123,6 +125,7 @@ def rollout_truncated(
             SampleBatch.ACTION: action,
             SampleBatch.NEXT_OBSERVATION: next_time_step.observation,
             SampleBatch.STEP_TYPE: next_time_step.step_type,
+            SampleBatch.EPISODE_REWARD: next_env_state.episode_reward,
             **policy_info,
         }
 

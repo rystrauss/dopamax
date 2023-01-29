@@ -9,10 +9,36 @@ from chex import Array
 from relax.spaces import Space, Discrete, Box
 from relax.typing import Observation
 
+_registry = {}
+
 # Function that takes no arguments and returns a network.
 NetworkBuildFn = Callable[[], hk.Module]
 
 
+def register(name: str):
+    """Decorator that registers a network build function."""
+
+    def _fn(cls):
+        _registry[name] = cls
+        return cls
+
+    return _fn
+
+
+def get_network_build_fn(name: str, **kwargs) -> NetworkBuildFn:
+    """Gets a network build function by name.
+
+    Args:
+        name: The name of the network build function to get.
+        kwargs: Keyword arguments to pass to the network build function constructor.
+
+    Returns:
+        The network build function.
+    """
+    return _registry[name](**kwargs)
+
+
+@register("mlp")
 def get_mlp_build_fn(hidden_units: Sequence[int] = (64, 64), activation: str = "relu") -> NetworkBuildFn:
     """Gets a network build function for a multi-layer perceptron.
 
@@ -60,6 +86,7 @@ def get_actor_critic_model_fn(
     Returns:
         A model function for the specified actor-critic agent.
     """
+
     def model_fn(observations: Observation) -> distrax.Distribution | Tuple[distrax.Distribution, Array]:
         policy_net = network_build_fn()
 

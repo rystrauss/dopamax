@@ -16,6 +16,7 @@ _NAME = "CartPole"
 @dataclass(frozen=True)
 class CartPoleEnvState(EnvState):
     episode_reward: float
+    episode_length: float
     x: float
     x_dot: float
     theta: float
@@ -90,7 +91,15 @@ class CartPole(Environment):
     def reset(self, key: PRNGKey) -> Tuple[TimeStep, CartPoleEnvState]:
         x, x_dot, theta, theta_dot = jax.random.uniform(key, minval=-0.05, maxval=0.05, shape=(4,))
 
-        state = CartPoleEnvState(episode_reward=0.0, x=x, x_dot=x_dot, theta=theta, theta_dot=theta_dot, time=0)
+        state = CartPoleEnvState(
+            episode_reward=0.0,
+            episode_length=0,
+            x=x,
+            x_dot=x_dot,
+            theta=theta,
+            theta_dot=theta_dot,
+            time=0,
+        )
         time_step = TimeStep.restart(state.to_obs())
 
         return time_step, state
@@ -117,6 +126,7 @@ class CartPole(Environment):
 
         state = CartPoleEnvState(
             episode_reward=state.episode_reward + reward,
+            episode_length=state.episode_length + 1,
             x=x,
             x_dot=x_dot,
             theta=theta,

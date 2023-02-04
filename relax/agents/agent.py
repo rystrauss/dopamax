@@ -1,16 +1,20 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional, Sequence
+from collections import deque
+from typing import Tuple, Optional, Sequence, Any
 
 import haiku as hk
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
-from chex import dataclass, PRNGKey
+from chex import dataclass, PRNGKey, Array
+from dm_env import StepType
 from jax.experimental import host_callback
 from ml_collections import ConfigDict
 from tqdm import tqdm
 
 from relax.environments.environment import Environment, TimeStep, EnvState
+from relax.rollouts import SampleBatch
 from relax.spaces import Space
 from relax.typing import Observation, Action, Metrics
 
@@ -73,6 +77,9 @@ class Agent(ABC):
         self._config.update(config)
         self._config.lock()
 
+        self._reward_buffer = deque(maxlen=100)
+        self._length_buffer = deque(maxlen=100)
+
     @property
     def env(self) -> Environment:
         return self._env
@@ -113,6 +120,26 @@ class Agent(ABC):
     def train_step(self, train_state: TrainState) -> Tuple[TrainState, Metrics]:
         pass
 
+    def _episode_buffer_update_fn(self, args: Tuple[Array, Array], transforms: Any):
+        rewards, lengths = args
+
+        rewards = rewards.flatten()
+        lengths = lengths.flatten()
+
+        for reward, length in zip(rewards, lengths):
+            if length != -np.inf:
+                self._reward_buffer.append(reward)
+                self._length_buffer.append(length)
+
+    def _send_episode_updates(self, rollout_data: SampleBatch):
+        rewards = jnp.where(
+            rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_REWARD], -jnp.inf
+        )
+        lengths = jnp.where(
+            rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_LENGTH], -jnp.inf
+        )
+        host_callback.id_tap(self._episode_buffer_update_fn, (rewards, lengths))
+
     def train(
         self, key: PRNGKey, num_iterations: int, callback_freq: int = 100, callbacks: Optional[Sequence] = None
     ) -> TrainState:
@@ -128,6 +155,18 @@ class Agent(ABC):
                 return
 
             state, metrics = args
+
+            metrics["min_episode_reward"] = min(self._reward_buffer)
+            metrics["max_episode_reward"] = max(self._reward_buffer)
+            metrics["mean_episode_reward"] = (
+                sum(self._reward_buffer) / len(self._reward_buffer) if self._reward_buffer else 0
+            )
+
+            metrics["min_episode_length"] = min(self._length_buffer)
+            metrics["max_episode_length"] = max(self._length_buffer)
+            metrics["mean_episode_length"] = (
+                sum(self._length_buffer) / len(self._length_buffer) if self._length_buffer else 0
+            )
 
             for callback in callbacks:
                 callback(state, metrics)

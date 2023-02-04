@@ -68,8 +68,8 @@ class PPO(Agent):
             self.config.initial_learning_rate, self.config.final_learning_rate, self.config.learning_rate_decay_steps
         )
         self._optimizer = optax.chain(
-            optax.scale_by_adam(eps=1e-5),
             optax.clip_by_global_norm(self.config.max_grad_norm),
+            optax.scale_by_adam(eps=1e-5),
             optax.scale_by_schedule(self._lr_schedule),
             optax.scale(-1.0),
         )
@@ -225,26 +225,17 @@ class PPO(Agent):
 
         metrics = jax.tree_map(jnp.mean, metrics)
 
-        incremental_episodes = jnp.sum(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)
-
-        metrics["min_episode_reward"] = jnp.min(
-            jnp.where(
-                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_REWARD], jnp.inf
-            )
-        )
-        metrics["mean_episode_reward"] = (
-            jnp.sum(rollout_data[SampleBatch.EPISODE_REWARD] * rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)
-            / incremental_episodes
-        )
-        metrics["max_episode_reward"] = jnp.max(
-            jnp.where(
-                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_REWARD], -jnp.inf
-            )
-        )
+        self._send_episode_updates(rollout_data)
+        # episode_metrics = get_truncated_rollout_episode_metrics(
+        #     rollout_data, self.config.num_envs_per_device, self.config.num_devices
+        # )
+        # metrics.update(episode_metrics)
 
         incremental_timesteps = (
             self.config.rollout_fragment_length * self.config.num_envs_per_device * self.config.num_devices
         )
+
+        incremental_episodes = jnp.sum(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)
 
         if self.config.num_envs_per_device > 1:
             incremental_episodes = jax.lax.psum(incremental_episodes, axis_name=self.batch_axis)

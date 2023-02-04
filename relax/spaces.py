@@ -12,6 +12,7 @@ class Space(ABC):
     Args:
         dtype: The dtype of the space.
     """
+
     def __init__(self, dtype: jnp.dtype):
         self._dtype = dtype
 
@@ -62,6 +63,7 @@ class Discrete(Space):
         n: The number of discrete elements in the space.
         dtype: The dtype of the space.
     """
+
     def __init__(self, n: int, dtype: jnp.dtype = jnp.int32):
         super().__init__(dtype)
 
@@ -99,6 +101,7 @@ class Box(Space):
         shape: The shape of the space. If None, the shape is inferred from low and high.
         dtype: The dtype of the space.
     """
+
     def __init__(
         self,
         low: Array | Scalar,

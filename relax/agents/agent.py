@@ -21,6 +21,8 @@ from relax.typing import Observation, Action, Metrics
 
 @dataclass(frozen=True)
 class TrainState:
+    """Dataclass for storing the training state of an agent."""
+
     key: PRNGKey
     train_step: int
     total_timesteps: int
@@ -34,6 +36,18 @@ class TrainState:
     def initial(
         cls, key: PRNGKey, params: hk.Params, opt_state: optax.OptState, time_step: TimeStep, env_state: EnvState
     ) -> "TrainState":
+        """Creates an initial training state.
+
+        Args:
+            key: A PRNGKey.
+            params: The initial parameters of the agent.
+            opt_state: The initial optimizer state.
+            time_step: The environment's initial time step.
+            env_state: The environment's initial state.
+
+        Returns:
+            The initial training state.
+        """
         return cls(
             key=key,
             train_step=0,
@@ -55,6 +69,20 @@ class TrainState:
         new_time_step: TimeStep,
         new_env_state: EnvState,
     ) -> "TrainState":
+        """Updates a training state after the completion of a new training iteration.
+
+        Args:
+            new_key: A new PRNGKey.
+            incremental_timesteps: The number of timesteps collected in the new training iteration.
+            incremental_episodes: The number of episodes completed in the new training iteration.
+            new_params: The new parameters of the agent.
+            new_opt_state: The new optimizer state.
+            new_time_step: The new environment time step.
+            new_env_state: The new environment state.
+
+        Returns:
+            The updated training state.
+        """
         return TrainState(
             key=new_key,
             train_step=self.train_step + 1,
@@ -68,6 +96,19 @@ class TrainState:
 
 
 class Agent(ABC):
+    """Abstract base class for an RL agent.
+
+    Subclasses are intended to be implemented in accordance with the Anakin Podracer architecture.
+    See: https://arxiv.org/abs/2104.06272
+
+    This means that we assume the agent's train step can be vectorized across a batch within each device, and can be
+    further parallelized across multiple devices.
+
+    Args:
+        env: The environment to interact with.
+        config: The configuration dictionary for the agent.
+    """
+
     batch_axis = "batch_axis"
     device_axis = "device_axis"
 
@@ -82,15 +123,17 @@ class Agent(ABC):
 
     @property
     def env(self) -> Environment:
+        """The environment that the agent interacts with."""
         return self._env
 
     @property
     def config(self) -> ConfigDict:
+        """The configuration dictionary for the agent."""
         return self._config
 
     @staticmethod
     def default_config() -> ConfigDict:
-        # Here we define base configurations that are common across all agents.
+        """Returns the default configuration dictionary for all agents."""
         return ConfigDict(
             {
                 "num_devices": 1,
@@ -100,10 +143,12 @@ class Agent(ABC):
 
     @property
     def observation_space(self) -> Space:
+        """The observation space of the agent's environment."""
         return self._env.observation_space
 
     @property
     def action_space(self) -> Space:
+        """The action space of the agent's environment."""
         return self._env.action_space
 
     @abstractmethod
@@ -114,13 +159,36 @@ class Agent(ABC):
 
     @abstractmethod
     def initial_train_state(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> TrainState:
+        """Initializes the agent's training state.
+
+        Args:
+            consistent_key: A PRNGKey that is used to initialize pieces of the train state which should be
+                consistent across all devices (e.g. network parameters).
+            divergent_key: A PRNGKey that is used to initialize pieces of the train state which should be
+                different across all devices (e.g. environment state).
+
+        Returns:
+            The initial training state.
+        """
         pass
 
     @abstractmethod
     def train_step(self, train_state: TrainState) -> Tuple[TrainState, Metrics]:
+        """Performs a single training step.
+
+        A training step should include experience collection and parameter updates.
+
+        Args:
+            train_state: The current training state.
+
+        Returns:
+            train_state: The updated training state.
+            metrics: A dictionary of metrics to be logged.
+        """
         pass
 
     def _episode_buffer_update_fn(self, args: Tuple[Array, Array], transforms: Any):
+        """Updates the episode reward and length buffers with new data."""
         rewards, lengths = args
 
         rewards = rewards.flatten()
@@ -132,6 +200,14 @@ class Agent(ABC):
                 self._length_buffer.append(length)
 
     def _send_episode_updates(self, rollout_data: SampleBatch):
+        """Sends rollout data to the host for updating the episode metrics for logging.
+
+        Args:
+            rollout_data: A batch of rollout data.
+
+        Returns:
+            None
+        """
         rewards = jnp.where(
             rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_REWARD], -jnp.inf
         )
@@ -142,7 +218,18 @@ class Agent(ABC):
 
     def train(
         self, key: PRNGKey, num_iterations: int, callback_freq: int = 100, callbacks: Optional[Sequence] = None
-    ) -> TrainState:
+    ) -> hk.Params:
+        """Trains the agent.
+
+        Args:
+            key: The PRNGKey to use to seed and randomness involved in training.
+            num_iterations: The number of times to call the train_step function.
+            callback_freq: The frequency at which to execute any callbacks.
+            callbacks: A list of callbacks.
+
+        Returns:
+            The final parameters of the agent.
+        """
         self._reward_buffer.clear()
         self._length_buffer.clear()
 
@@ -227,14 +314,16 @@ class Agent(ABC):
             init_divergent_key = jnp.squeeze(init_divergent_key, axis=0)
 
         initial_train_state = initial_train_state_fn(init_consistent_key, init_divergent_key)
-        train_state = jax.device_get(train_fn(initial_train_state))
+        train_state = train_fn(initial_train_state)
+
+        final_params = jax.device_get(train_state.params)
 
         if self.config.num_envs_per_device > 1:
-            train_state = jax.tree_map(lambda x: x[0], train_state)
+            final_params = jax.tree_map(lambda x: x[0], final_params)
 
         if self.config.num_devices > 1:
-            train_state = jax.tree_map(lambda x: x[0], train_state)
+            final_params = jax.tree_map(lambda x: x[0], final_params)
 
         pbar.close()
 
-        return train_state
+        return final_params

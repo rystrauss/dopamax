@@ -21,19 +21,35 @@ from relax.typing import Metrics, Observation, Action
 
 _DEFAULT_PPO_CONFIG = ConfigDict(
     {
+        # The number of steps to collect in each rollout fragment.
         "rollout_fragment_length": 128,
+        # The GAE lambda parameter.
         "lambda_": 0.95,
+        # The agent's discount factor.
         "gamma": 0.99,
+        # The initial learning rate.
         "initial_learning_rate": 2.5e-4,
-        "final_learning_rate": 1e-8,
-        "learning_rate_decay_steps": 10000,
+        # The final learning rate.
+        "final_learning_rate": 2.5e-4,
+        # The number of steps over which to linearly decay the learning rate. Note that this is not the number of train
+        # iterations, but the number of gradient updates.
+        "learning_rate_decay_steps": 1,
+        # The maximum gradient norm.
         "max_grad_norm": 0.5,
+        # The size of the minibatches to perform gradient updates on. This should be a factor of the rollout fragment
+        # length.
         "minibatch_size": 32,
+        # The number of epochs to perform gradient updates for at each train step.
         "num_epochs": 4,
+        # The PPO clip parameter.
         "clip": 0.2,
+        # The coefficient for the entropy bonus.
         "entropy_coef": 0.01,
+        # The coefficient for the value loss.
         "value_coef": 0.5,
+        # The type of network to use.
         "network": "mlp",
+        # The configuration dictionary for the network.
         "network_config": {"hidden_units": [64, 64]},
     }
 )
@@ -41,6 +57,15 @@ _DEFAULT_PPO_CONFIG = ConfigDict(
 
 @register("PPO")
 class PPO(Agent):
+    """Proximal Policy Optimization (PPO) agent.
+
+    Args:
+        env: The environment to interact with.
+        config: The configuration dictionary for the agent.
+
+    References:
+        https://arxiv.org/abs/1707.06347
+    """
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
 

@@ -40,20 +40,20 @@ def main(config, offline):
 
     key = jax.random.PRNGKey(config.seed)
 
-    train_state = agent.train(
+    params = agent.train(
         key,
         config.train_iterations,
         callbacks=[WandbCallback(run)],
     )
 
-    train_state_path = os.path.join(wandb.run.dir, "train_state.pkl")
+    params_path = os.path.join(wandb.run.dir, "params.pkl")
 
-    with open(train_state_path, "wb") as f:
-        pickle.dump(train_state, f)
+    with open(params_path, "wb") as f:
+        pickle.dump(params, f)
 
-    train_state_artifact = wandb.Artifact("train_state", type="train_state")
-    train_state_artifact.add_file(train_state_path)
-    run.log_artifact(train_state_artifact)
+    params_artifact = wandb.Artifact("final_params", type="params")
+    params_artifact.add_file(params_path)
+    run.log_artifact(params_artifact)
 
 
 if __name__ == "__main__":

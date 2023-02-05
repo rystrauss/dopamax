@@ -143,6 +143,9 @@ class Agent(ABC):
     def train(
         self, key: PRNGKey, num_iterations: int, callback_freq: int = 100, callbacks: Optional[Sequence] = None
     ) -> TrainState:
+        self._reward_buffer.clear()
+        self._length_buffer.clear()
+
         pbar = tqdm(total=num_iterations, desc="Training")
         callbacks = callbacks or []
 
@@ -151,7 +154,7 @@ class Agent(ABC):
                 pbar.update(10)
 
         def callback_fn(args, transforms, device):
-            if device.id == 0:
+            if device.id != 0:
                 return
 
             state, metrics = args

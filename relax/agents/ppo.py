@@ -2,7 +2,6 @@ from functools import partial
 from typing import Tuple, Dict
 
 import distrax
-import einops
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -17,7 +16,7 @@ from relax.agents.utils import register
 from relax.environments.environment import Environment
 from relax.math import explained_variance
 from relax.networks import get_actor_critic_model_fn, get_network_build_fn
-from relax.rollouts import rollout_truncated, SampleBatch
+from relax.rollouts import rollout_truncated, SampleBatch, create_minibatches
 from relax.typing import Metrics, Observation, Action
 
 _DEFAULT_PPO_CONFIG = ConfigDict(
@@ -129,14 +128,7 @@ class PPO(Agent):
 
     def _update(self, params, opt_state, key, obs, actions, advantages, returns, old_log_probs, clip):
         grads, info = jax.grad(self._loss, has_aux=True)(
-            params,
-            key,
-            jax.lax.stop_gradient(obs),
-            jax.lax.stop_gradient(actions),
-            jax.lax.stop_gradient(advantages),
-            jax.lax.stop_gradient(returns),
-            jax.lax.stop_gradient(old_log_probs),
-            clip,
+            params, key, obs, actions, advantages, returns, old_log_probs, clip
         )
 
         if self.config.num_envs_per_device > 1:
@@ -159,6 +151,8 @@ class PPO(Agent):
             train_state.time_step,
             train_state.env_state,
         )
+
+        self._send_episode_updates(rollout_data)
 
         _, final_value = self._model.apply(
             train_state.params,
@@ -204,15 +198,7 @@ class PPO(Agent):
 
             next_key, shuffle_key = jax.random.split(key)
 
-            minibatches = jax.tree_map(
-                lambda x: einops.rearrange(
-                    jax.random.permutation(shuffle_key, x, independent=True),
-                    "(n m) ... -> n m ...",
-                    n=self.config.rollout_fragment_length // self.config.minibatch_size,
-                    m=self.config.minibatch_size,
-                ),
-                rollout_data,
-            )
+            minibatches = create_minibatches(shuffle_key, rollout_data, self.config.minibatch_size)
 
             return jax.lax.scan(update_scan_fn, (params, opt_state, next_key), minibatches)
 
@@ -224,12 +210,6 @@ class PPO(Agent):
         )
 
         metrics = jax.tree_map(jnp.mean, metrics)
-
-        self._send_episode_updates(rollout_data)
-        # episode_metrics = get_truncated_rollout_episode_metrics(
-        #     rollout_data, self.config.num_envs_per_device, self.config.num_devices
-        # )
-        # metrics.update(episode_metrics)
 
         incremental_timesteps = (
             self.config.rollout_fragment_length * self.config.num_envs_per_device * self.config.num_devices

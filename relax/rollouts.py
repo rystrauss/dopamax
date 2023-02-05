@@ -1,5 +1,6 @@
 from typing import Callable, Tuple, Dict
 
+import einops
 import haiku as hk
 import jax
 from chex import PRNGKey, ArrayTree
@@ -146,3 +147,24 @@ def rollout_truncated(
     )
 
     return rollout_data, final_key, final_time_step, final_env_state
+
+
+def create_minibatches(key: PRNGKey, rollout_data: SampleBatch, minibatch_size: int) -> SampleBatch:
+    """Separates a rollout into minibatches.
+
+    Args:
+        key: A PRNG key used to shuffle the data.
+        rollout_data: A SampleBatch containing the rollout data.
+        minibatch_size: The size of each minibatch.
+
+    Returns:
+        A SampleBatch containing the minibatches.
+    """
+    return jax.tree_map(
+        lambda x: einops.rearrange(
+            jax.random.permutation(key, x, independent=False),
+            "(n m) ... -> n m ...",
+            m=minibatch_size,
+        ),
+        rollout_data,
+    )

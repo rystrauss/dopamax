@@ -1,3 +1,5 @@
+import os
+import pickle
 import random
 
 import click
@@ -44,7 +46,14 @@ def main(config, offline):
         callbacks=[WandbCallback(run)],
     )
 
-    print(train_state.total_timesteps)
+    train_state_path = os.path.join(wandb.run.dir, "train_state.pkl")
+
+    with open(train_state_path, "wb") as f:
+        pickle.dump(train_state, f)
+
+    train_state_artifact = wandb.Artifact("train_state", type="train_state")
+    train_state_artifact.add_file(train_state_path)
+    run.log_artifact(train_state_artifact)
 
 
 if __name__ == "__main__":

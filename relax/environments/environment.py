@@ -3,6 +3,7 @@ from dataclasses import field
 from typing import Dict, Any, Tuple, Optional
 
 import jax.numpy as jnp
+import numpy as np
 from chex import PRNGKey, dataclass
 from dm_env import StepType
 
@@ -184,3 +185,14 @@ class Environment(ABC):
             A tuple containing the time step and the next environment state.
         """
         pass
+
+    def render(self, state: EnvState) -> np.ndarray:
+        """Renders the current state of the environment as an RGB frame.
+
+        Args:
+            state: A `EnvState` representing the current state of the environment.
+
+        Returns:
+            An RGB frame of the current state of the environment.
+        """
+        raise NotImplementedError("This environment does not support rendering.")

@@ -2,8 +2,11 @@ from typing import Tuple
 
 import jax
 import jax.numpy as jnp
-from chex import dataclass, PRNGKey
+import numpy as np
+import pygame
+from chex import dataclass, PRNGKey, Array
 from dm_env import StepType
+from pygame import gfxdraw
 
 from relax.environments.environment import EnvState, Environment, TimeStep
 from relax.environments.utils import register
@@ -143,3 +146,64 @@ class CartPole(Environment):
         )
 
         return time_step, state
+
+    def render(self, state: CartPoleEnvState) -> np.ndarray:
+        screen_width, screen_height = 600, 400
+
+        screen = pygame.Surface((screen_width, screen_height))
+
+        world_width = self.x_threshold * 2
+        scale = screen_width / world_width
+        polewidth = 10.0
+        polelen = scale * (2 * self.length)
+        cartwidth = 50.0
+        cartheight = 30.0
+
+        surf = pygame.Surface((screen_width, screen_height))
+        surf.fill((255, 255, 255))
+
+        l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
+        axleoffset = cartheight / 4.0
+        cartx = state.x * scale + screen_width / 2.0  # MIDDLE OF CART
+        carty = 100  # TOP OF CART
+        cart_coords = [(l, b), (l, t), (r, t), (r, b)]
+        cart_coords = [(c[0] + cartx, c[1] + carty) for c in cart_coords]
+        gfxdraw.aapolygon(surf, cart_coords, (0, 0, 0))
+        gfxdraw.filled_polygon(surf, cart_coords, (0, 0, 0))
+
+        l, r, t, b = (
+            -polewidth / 2,
+            polewidth / 2,
+            polelen - polewidth / 2,
+            -polewidth / 2,
+        )
+
+        pole_coords = []
+        for coord in [(l, b), (l, t), (r, t), (r, b)]:
+            coord = pygame.math.Vector2(coord).rotate_rad(-state.theta)
+            coord = (coord[0] + cartx, coord[1] + carty + axleoffset)
+            pole_coords.append(coord)
+        gfxdraw.aapolygon(surf, pole_coords, (202, 152, 101))
+        gfxdraw.filled_polygon(surf, pole_coords, (202, 152, 101))
+
+        gfxdraw.aacircle(
+            surf,
+            int(cartx),
+            int(carty + axleoffset),
+            int(polewidth / 2),
+            (129, 132, 203),
+        )
+        gfxdraw.filled_circle(
+            surf,
+            int(cartx),
+            int(carty + axleoffset),
+            int(polewidth / 2),
+            (129, 132, 203),
+        )
+
+        gfxdraw.hline(surf, 0, screen_width, carty, (0, 0, 0))
+
+        surf = pygame.transform.flip(surf, False, True)
+        screen.blit(surf, (0, 0))
+
+        return np.transpose(np.array(pygame.surfarray.pixels3d(screen)), axes=(1, 0, 2))

@@ -3,10 +3,8 @@ from typing import Tuple, Optional
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pygame
 from chex import dataclass, PRNGKey
 from dm_env import StepType
-from pygame import gfxdraw
 
 from relax.environments.environment import EnvState, Environment, TimeStep
 from relax.environments.utils import register
@@ -134,10 +132,11 @@ class CartPole(Environment):
         theta_dot = state.theta_dot + self.tau * thetaacc
 
         reward = 1.0 - prev_terminal
+        length = 1 - prev_terminal
 
         state = CartPoleEnvState(
             episode_reward=state.episode_reward + reward,
-            episode_length=state.episode_length + reward,
+            episode_length=state.episode_length + length,
             x=x,
             x_dot=x_dot,
             theta=theta,
@@ -156,6 +155,9 @@ class CartPole(Environment):
         return time_step, state
 
     def render(self, state: CartPoleEnvState) -> np.ndarray:
+        import pygame
+        from pygame import gfxdraw
+
         screen_width, screen_height = 600, 400
 
         screen = pygame.Surface((screen_width, screen_height))

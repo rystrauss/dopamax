@@ -1,6 +1,7 @@
 env_name: "CartPole"
 agent_name: "PPO"
 train_iterations: 1500
+# Comment out the seed if you want each run to be different.
 seed: 1035704761
 agent_config:
   rollout_fragment_length: 128

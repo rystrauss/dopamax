@@ -6,7 +6,6 @@ import jax
 import jax.numpy as jnp
 from chex import PRNGKey, ArrayTree
 from dm_env import StepType
-from jax.experimental import host_callback
 
 from relax.environments.environment import Environment, EnvState, TimeStep
 from relax.typing import Observation, Action
@@ -61,8 +60,11 @@ def rollout_episode(
         key, step_key, reset_env_key, policy_key = jax.random.split(key, 4)
 
         if render:
-            frame = host_callback.call(
-                env.render, env_state, result_shape=jax.ShapeDtypeStruct(env.render_shape, jnp.uint8)
+            frame = jax.pure_callback(
+                env.render,
+                jax.ShapeDtypeStruct(env.render_shape, jnp.uint8),
+                env_state,
+                vectorized=False,
             )
 
         action, policy_info = policy_fn(policy_params, policy_key, time_step.observation)

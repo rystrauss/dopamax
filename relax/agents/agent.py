@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from chex import dataclass, PRNGKey, Array
+from chex import dataclass, PRNGKey, Array, ArrayTree
 from dm_env import StepType
 from jax.experimental import host_callback
 from ml_collections import ConfigDict
@@ -216,6 +216,26 @@ class Agent(ABC):
         )
         host_callback.id_tap(self._episode_buffer_update_fn, (rewards, lengths))
 
+    def _maybe_all_reduce(self, fn: str, x: ArrayTree) -> ArrayTree:
+        """Performs an all-reduce operation if there are multiple devices or batching.
+
+        Args:
+            fn: The name of the all-reduce function to use in the jax.lax namespace.
+            x: The array tree to all-reduce.
+
+        Returns:
+            The (maybe) all-reduced array tree.
+        """
+        fn = getattr(jax.lax, fn)
+
+        if self.config.num_envs_per_device > 1:
+            x = fn(x, axis_name=self.batch_axis)
+
+        if self.config.num_devices > 1:
+            x = fn(x, axis_name=self.device_axis)
+
+        return x
+
     def train(
         self, key: PRNGKey, num_iterations: int, callback_freq: int = 100, callbacks: Optional[Sequence] = None
     ) -> hk.Params:
@@ -224,7 +244,7 @@ class Agent(ABC):
         Args:
             key: The PRNGKey to use to seed and randomness involved in training.
             num_iterations: The number of times to call the train_step function.
-            callback_freq: The frequency at which to execute any callbacks.
+            callback_freq: The frequency, in terms of call to `train_step`, at which to execute any callbacks.
             callbacks: A list of callbacks.
 
         Returns:

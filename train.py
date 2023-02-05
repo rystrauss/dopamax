@@ -4,10 +4,10 @@ import random
 
 import click
 import jax.random
+import wandb
 import yaml
 from ml_collections import ConfigDict
 
-import wandb
 from relax.agents.utils import get_agent_cls
 from relax.callbacks import WandbCallback
 from relax.environments import make_env
@@ -17,6 +17,7 @@ from relax.environments import make_env
 @click.option(
     "--config",
     type=click.Path(file_okay=True, dir_okay=False, exists=True),
+    required=True,
     help="Path to the training config YAML file.",
 )
 @click.option("--offline", is_flag=True, help="Run in offline mode.")
@@ -43,17 +44,19 @@ def main(config, offline):
     params = agent.train(
         key,
         config.train_iterations,
+        callback_freq=config.get("callback_freq", 100),
         callbacks=[WandbCallback(run)],
     )
 
-    params_path = os.path.join(wandb.run.dir, "params.pkl")
+    if not offline:
+        params_path = os.path.join(run.dir, "params.pkl")
 
-    with open(params_path, "wb") as f:
-        pickle.dump(params, f)
+        with open(params_path, "wb") as f:
+            pickle.dump(params, f)
 
-    params_artifact = wandb.Artifact("final_params", type="params")
-    params_artifact.add_file(params_path)
-    run.log_artifact(params_artifact)
+        params_artifact = wandb.Artifact(config.env_name + "-" + config.agent_name + "-agent", type="agent")
+        params_artifact.add_file(params_path)
+        run.log_artifact(params_artifact)
 
 
 if __name__ == "__main__":

@@ -66,6 +66,7 @@ class PPO(Agent):
     References:
         https://arxiv.org/abs/1707.06347
     """
+
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
 
@@ -156,11 +157,7 @@ class PPO(Agent):
             params, key, obs, actions, advantages, returns, old_log_probs, clip
         )
 
-        if self.config.num_envs_per_device > 1:
-            grads, info = jax.lax.pmean((grads, info), axis_name=self.batch_axis)
-
-        if self.config.num_devices > 1:
-            grads, info = jax.lax.pmean((grads, info), axis_name=self.device_axis)
+        grads, info = self._maybe_all_reduce("pmean", (grads, info))
 
         updates, new_opt_state = self._optimizer.update(grads, opt_state, params)
         new_params = optax.apply_updates(params, updates)
@@ -241,12 +238,7 @@ class PPO(Agent):
         )
 
         incremental_episodes = jnp.sum(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)
-
-        if self.config.num_envs_per_device > 1:
-            incremental_episodes = jax.lax.psum(incremental_episodes, axis_name=self.batch_axis)
-
-        if self.config.num_devices > 1:
-            incremental_episodes = jax.lax.psum(incremental_episodes, axis_name=self.device_axis)
+        incremental_episodes = self._maybe_all_reduce("psum", incremental_episodes)
 
         next_train_state = train_state.update(
             new_key=next_train_state_key,

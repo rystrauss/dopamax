@@ -30,6 +30,7 @@ def test_cartpole():
         jax_render = jax_env.render(state)
 
         chex.assert_trees_all_equal(gym_render, jax_render)
+        chex.assert_shape((gym_render, jax_render), jax_env.render_shape)
 
         action = jax_env.action_space.sample(key)
         time_step, state = jax_env.step(key, state, action)

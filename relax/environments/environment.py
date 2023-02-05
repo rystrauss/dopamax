@@ -160,6 +160,16 @@ class Environment(ABC):
         """The action space of the environment."""
         pass
 
+    @property
+    def renderable(self) -> bool:
+        """Whether the environment can be rendered."""
+        return False
+
+    @property
+    def render_shape(self) -> Optional[Tuple[int, int, int]]:
+        """The shape of rendered frames."""
+        return None
+
     @abstractmethod
     def reset(self, key: PRNGKey) -> Tuple[TimeStep, EnvState]:
         """Resets the environment to the start of a new episode.

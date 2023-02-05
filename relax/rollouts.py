@@ -3,8 +3,10 @@ from typing import Callable, Tuple, Dict
 import einops
 import haiku as hk
 import jax
+import jax.numpy as jnp
 from chex import PRNGKey, ArrayTree
 from dm_env import StepType
+from jax.experimental import host_callback
 
 from relax.environments.environment import Environment, EnvState, TimeStep
 from relax.typing import Observation, Action
@@ -26,6 +28,7 @@ class SampleBatch(dict):
     VALID_MASK = "valid_mask"
     EPISODE_REWARD = "episode_reward"
     EPISODE_LENGTH = "episode_length"
+    RENDER = "render"
 
 
 def rollout_episode(
@@ -33,6 +36,7 @@ def rollout_episode(
     policy_fn: Callable[[hk.Params, PRNGKey, Observation], Tuple[Action, Dict[str, ArrayTree]]],
     policy_params: hk.Params,
     key: PRNGKey,
+    render: bool = False,
 ) -> SampleBatch:
     """Rollout a single episode according to the given policy.
 
@@ -42,15 +46,24 @@ def rollout_episode(
             and returns an action.
         policy_params: The policy parameters to feed into the policy function.
         key: A PRNG key.
+        render: Whether to include environment renders in the rollout.
 
     Returns:
         A dictionary containing trajectory data from the rollout.
     """
 
+    if render:
+        assert env.renderable, "Environment cannot be rendered."
+
     def transition_fn(carry, _):
         key, time_step, env_state, valid_mask = carry
 
         key, step_key, reset_env_key, policy_key = jax.random.split(key, 4)
+
+        if render:
+            frame = host_callback.call(
+                env.render, env_state, result_shape=jax.ShapeDtypeStruct(env.render_shape, jnp.uint8)
+            )
 
         action, policy_info = policy_fn(policy_params, policy_key, time_step.observation)
 
@@ -65,12 +78,14 @@ def rollout_episode(
             SampleBatch.ACTION: action,
             SampleBatch.NEXT_OBSERVATION: next_time_step.observation,
             SampleBatch.STEP_TYPE: next_time_step.step_type,
-            # TODO: Verify whether this should be valid_mask or next_valid_mask.
-            SampleBatch.VALID_MASK: next_valid_mask,
+            SampleBatch.VALID_MASK: valid_mask,
             SampleBatch.EPISODE_REWARD: next_env_state.episode_reward,
             SampleBatch.EPISODE_LENGTH: next_env_state.episode_length,
             **policy_info,
         }
+
+        if render:
+            data[SampleBatch.RENDER] = frame
 
         return (key, next_time_step, next_env_state, next_valid_mask), data
 

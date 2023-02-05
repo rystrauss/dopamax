@@ -2,7 +2,8 @@ import chex
 import jax.numpy as jnp
 import jax.random
 
-from relax.rollouts import create_minibatches
+from relax.environments import CartPole
+from relax.rollouts import create_minibatches, rollout_episode, SampleBatch
 
 
 def test_create_minibatches():
@@ -22,3 +23,18 @@ def test_create_minibatches():
 
     for i in range(5):
         assert jnp.all(minibatches["a"][i] * 10 == jnp.expand_dims(minibatches["b"][i], 1))
+
+
+def test_rollout_episode_render():
+    key = jax.random.PRNGKey(0)
+    env = CartPole()
+
+    rollout_data = jax.jit(rollout_episode, static_argnums=(0, 1, 4))(
+        env,
+        lambda params, key, obs: (env.action_space.sample(key), {}),
+        {},
+        key,
+        render=True,
+    )
+
+    chex.assert_shape(rollout_data[SampleBatch.RENDER], (env.max_episode_length, *env.render_shape))

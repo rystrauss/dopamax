@@ -1,10 +1,10 @@
-from typing import Tuple
+from typing import Tuple, Optional
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pygame
-from chex import dataclass, PRNGKey, Array
+from chex import dataclass, PRNGKey
 from dm_env import StepType
 from pygame import gfxdraw
 
@@ -75,6 +75,14 @@ class CartPole(Environment):
     def action_space(self) -> Space:
         return Discrete(2)
 
+    @property
+    def renderable(self) -> bool:
+        return True
+
+    @property
+    def render_shape(self) -> Optional[Tuple[int, int, int]]:
+        return 400, 600, 3
+
     def _is_terminal(self, state: CartPoleEnvState) -> Tuple[bool, bool]:
         done1 = jnp.logical_or(
             state.x < -self.x_threshold,
@@ -129,7 +137,7 @@ class CartPole(Environment):
 
         state = CartPoleEnvState(
             episode_reward=state.episode_reward + reward,
-            episode_length=state.episode_length + 1,
+            episode_length=state.episode_length + reward,
             x=x,
             x_dot=x_dot,
             theta=theta,

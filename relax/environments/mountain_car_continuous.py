@@ -8,41 +8,34 @@ from chex import dataclass, PRNGKey
 from dm_env import StepType
 
 from relax.environments.environment import EnvState, Environment, TimeStep
+from relax.environments.mountain_car import MountainCarEnvState
 from relax.environments.utils import register
-from relax.spaces import Space, Discrete, Box
-from relax.typing import Observation, Action
+from relax.spaces import Space, Box
+from relax.typing import Action
 
-_NAME = "MountainCar"
+_NAME = "MountainCarContinuous"
 
-
-@dataclass(frozen=True)
-class MountainCarEnvState(EnvState):
-    episode_reward: float
-    episode_length: float
-    position: float
-    velocity: float
-    time: int
-
-    def to_obs(self) -> Observation:
-        return jnp.array([self.position, self.velocity])
+MountainCarContinuousEnvState = MountainCarEnvState
 
 
 @register(_NAME)
 @dataclass(frozen=True)
-class MountainCar(Environment):
-    """The MountainCar environment.
+class MountainCarContinuous(Environment):
+    """The continuous version of the MountainCar environment.
 
     References:
         This implementation is adapted from:
-        https://github.com/RobertTLange/gymnax/blob/main/gymnax/environments/classic_control/mountain_car.py
+        https://github.com/RobertTLange/gymnax/blob/main/gymnax/environments/classic_control/continuous_mountain_car.py
     """
 
+    min_action: float = -1.0
+    max_action: float = 1.0
     min_position: float = -1.2
     max_position: float = 0.6
     max_speed: float = 0.07
-    goal_position: float = 0.5
+    goal_position: float = 0.45
     goal_velocity: float = 0.0
-    force: float = 0.001
+    power: float = 0.0015
     gravity: float = 0.0025
 
     @property
@@ -51,7 +44,7 @@ class MountainCar(Environment):
 
     @property
     def max_episode_length(self) -> int:
-        return 200
+        return 999
 
     @property
     def observation_space(self) -> Space:
@@ -61,7 +54,7 @@ class MountainCar(Environment):
 
     @property
     def action_space(self) -> Space:
-        return Discrete(3)
+        return Box(low=self.min_action, high=self.max_action, shape=(1,))
 
     @property
     def renderable(self) -> bool:
@@ -71,7 +64,7 @@ class MountainCar(Environment):
     def render_shape(self) -> Optional[Tuple[int, int, int]]:
         return 400, 600, 3
 
-    def _is_terminal(self, state: MountainCarEnvState) -> Tuple[bool, bool]:
+    def _is_terminal(self, state: MountainCarContinuousEnvState) -> Tuple[bool, bool]:
         done = jnp.logical_and(state.position >= self.goal_position, state.velocity >= self.goal_velocity)
         truncate = state.time >= self.max_episode_length
         done = jnp.logical_or(done, truncate)
@@ -92,16 +85,23 @@ class MountainCar(Environment):
 
         return time_step, state
 
-    def step(self, key: PRNGKey, state: MountainCarEnvState, action: Action) -> Tuple[TimeStep, MountainCarEnvState]:
+    def step(
+        self, key: PRNGKey, state: MountainCarContinuousEnvState, action: Action
+    ) -> Tuple[TimeStep, MountainCarContinuousEnvState]:
         prev_terminal, _ = self._is_terminal(state)
 
-        velocity = state.velocity + ((action - 1) * self.force + jnp.cos(3 * state.position) * -self.gravity)
+        action = jnp.squeeze(action, 0)
+
+        force = jnp.clip(action, self.min_action, self.max_action)
+        velocity = state.velocity + (force * self.power - jnp.cos(3 * state.position) * self.gravity)
         velocity = jnp.clip(velocity, -self.max_speed, self.max_speed)
         position = state.position + velocity
         position = jnp.clip(position, self.min_position, self.max_position)
-        velocity = velocity * (1 - (position == self.min_position) * (velocity < 0))
+        velocity = velocity * (1 - (position >= self.goal_position) * (velocity < 0))
 
-        reward = -1.0 + prev_terminal
+        reward = -0.1 * action**2 + 100 * ((position >= self.goal_position) * (velocity >= self.goal_velocity))
+        reward *= ~prev_terminal
+
         length = 1 - prev_terminal
 
         state = MountainCarEnvState(
@@ -125,7 +125,7 @@ class MountainCar(Environment):
     def _height(self, xs):
         return np.sin(3 * xs) * 0.45 + 0.55
 
-    def render(self, state: MountainCarEnvState) -> np.ndarray:
+    def render(self, state: MountainCarContinuousEnvState) -> np.ndarray:
         import pygame
         from pygame import gfxdraw
 

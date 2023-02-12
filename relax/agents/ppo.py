@@ -51,6 +51,10 @@ _DEFAULT_PPO_CONFIG = ConfigDict(
         "network": "mlp",
         # The configuration dictionary for the network.
         "network_config": {"hidden_units": [64, 64]},
+        # The type of value network to use. Must be one of "copy" or "shared".
+        "value_network": "copy",
+        # Whether to use a floating scale for Gaussian policies.
+        "free_log_std": True,
     }
 )
 
@@ -72,7 +76,10 @@ class PPO(Agent):
 
         network_build_fn = get_network_build_fn(self.config.network, **self.config.network_config)
         model_fn = get_actor_critic_model_fn(
-            env.action_space, network_build_fn, value_network="copy", free_log_std=True
+            env.action_space,
+            network_build_fn,
+            value_network=self.config.value_network,
+            free_log_std=self.config.free_log_std,
         )
         self._model = hk.transform(model_fn)
 
@@ -141,16 +148,21 @@ class PPO(Agent):
 
         clip_frac = jnp.mean(jnp.greater(jnp.abs(ratio - 1.0), clip).astype(obs.dtype))
 
-        info = {
+        metrics = {
             "loss": loss,
             "policy_loss": policy_loss,
             "value_loss": value_loss,
             "policy_entropy": entropy,
-            "value_explained_variance": explained_variance(returns, value_preds),
+            "value_explained_variance": explained_variance(
+                returns,
+                value_preds,
+                self.config.num_envs_per_device,
+                self.config.num_devices,
+            ),
             "clip_frac": clip_frac,
         }
 
-        return loss, info
+        return loss, metrics
 
     def _update(self, params, opt_state, key, obs, actions, advantages, returns, old_log_probs, clip):
         grads, info = jax.grad(self._loss, has_aux=True)(
@@ -232,6 +244,7 @@ class PPO(Agent):
         )
 
         metrics = jax.tree_map(jnp.mean, metrics)
+        metrics = self._maybe_all_reduce("pmean", metrics)
 
         incremental_timesteps = (
             self.config.rollout_fragment_length * self.config.num_envs_per_device * self.config.num_devices

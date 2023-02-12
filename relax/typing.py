@@ -1,10 +1,10 @@
 from typing import Dict, Mapping, Any, Iterable
 
-from chex import ArrayTree, Numeric
+from chex import ArrayTree, Numeric, Scalar
 
 NumericTree = Numeric | Iterable["NumericTree"] | Mapping[Any, "NumericTree"]
 
 Observation = ArrayTree
 Action = NumericTree
 
-Metrics = Dict[str, Numeric]
+Metrics = Dict[str, Scalar]

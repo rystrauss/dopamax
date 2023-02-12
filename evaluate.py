@@ -27,6 +27,7 @@ def main(agent_artifact, num_episodes, render):
     artifact_dir = artifact.download()
 
     train_run_config = ConfigDict(artifact.logged_by().config)
+    run.config["env_name"] = train_run_config.env_name
 
     env = make_env(train_run_config.env_name)
     agent_cls = get_agent_cls(train_run_config.agent_name)

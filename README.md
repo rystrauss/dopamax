@@ -1,2 +1,3 @@
-# relax
- Implementations of RL algorithms in JAX.
+# Dopamax
+
+Reinforcement Learning in pure JAX.

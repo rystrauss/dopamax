@@ -1,0 +1,20 @@
+env_name: "MountainCarContinuous"
+agent_name: "PPO"
+train_iterations: 2000
+# Comment out the seed if you want each run to be different.
+seed: 2887859021
+agent_config:
+  rollout_fragment_length: 128
+  minibatch_size: 8
+  num_devices: 4
+  num_envs_per_device: 4
+  gamma: 0.99
+  lambda_: 0.95
+  entropy_coef: 0.2
+  max_grad_norm: 1.0
+  num_epochs: 4
+  initial_learning_rate: 0.0004
+  final_learning_rate: 0.0004
+  network_config:
+    hidden_units: [ 64, 64 ]
+  value_network: "shared"

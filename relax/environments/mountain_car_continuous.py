@@ -61,6 +61,10 @@ class MountainCarContinuous(Environment):
         return True
 
     @property
+    def fps(self) -> Optional[int]:
+        return 30
+
+    @property
     def render_shape(self) -> Optional[Tuple[int, int, int]]:
         return 400, 600, 3
 

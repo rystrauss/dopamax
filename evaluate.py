@@ -66,7 +66,7 @@ def main(agent_artifact, num_episodes, render):
 
     if render:
         to_log["renders"] = [
-            wandb.Video(einops.rearrange(np.array(data), "t h w c -> t c h w"), fps=30) for data in renders
+            wandb.Video(einops.rearrange(np.array(data), "t h w c -> t c h w"), fps=env.fps) for data in renders
         ]
 
     run.log(to_log)

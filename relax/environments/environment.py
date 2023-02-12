@@ -166,6 +166,11 @@ class Environment(ABC):
         return False
 
     @property
+    def fps(self) -> Optional[int]:
+        """The frames per second of rendered frames."""
+        return None
+
+    @property
     def render_shape(self) -> Optional[Tuple[int, int, int]]:
         """The shape of rendered frames."""
         return None

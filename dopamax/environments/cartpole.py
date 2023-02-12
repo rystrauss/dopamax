@@ -6,10 +6,10 @@ import numpy as np
 from chex import dataclass, PRNGKey
 from dm_env import StepType
 
-from relax.environments.environment import EnvState, Environment, TimeStep
-from relax.environments.utils import register
-from relax.spaces import Space, Box, Discrete
-from relax.typing import Action, Observation
+from dopamax.environments.environment import EnvState, Environment, TimeStep
+from dopamax.environments.utils import register
+from dopamax.spaces import Space, Box, Discrete
+from dopamax.typing import Action, Observation
 
 _NAME = "CartPole"
 

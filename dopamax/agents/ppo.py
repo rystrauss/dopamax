@@ -11,13 +11,13 @@ from chex import PRNGKey, ArrayTree
 from dm_env import StepType
 from ml_collections import ConfigDict
 
-from relax.agents.agent import Agent, TrainState
-from relax.agents.utils import register
-from relax.environments.environment import Environment
-from relax.math import explained_variance
-from relax.networks import get_actor_critic_model_fn, get_network_build_fn
-from relax.rollouts import rollout_truncated, SampleBatch, create_minibatches
-from relax.typing import Metrics, Observation, Action
+from dopamax.agents.agent import Agent, TrainState
+from dopamax.agents.utils import register
+from dopamax.environments.environment import Environment
+from dopamax.math import explained_variance
+from dopamax.networks import get_actor_critic_model_fn, get_network_build_fn
+from dopamax.rollouts import rollout_truncated, SampleBatch, create_minibatches
+from dopamax.typing import Metrics, Observation, Action
 
 _DEFAULT_PPO_CONFIG = ConfigDict(
     {

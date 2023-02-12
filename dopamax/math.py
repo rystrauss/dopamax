@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from chex import Array
 
-from relax.agents.agent import Agent
+from dopamax.agents.agent import Agent
 
 
 def explained_variance(targets: Array, preds: Array, num_envs_per_device: int, num_devices: int) -> Array:

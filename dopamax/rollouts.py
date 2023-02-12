@@ -7,8 +7,8 @@ import jax.numpy as jnp
 from chex import PRNGKey, ArrayTree
 from dm_env import StepType
 
-from relax.environments.environment import Environment, EnvState, TimeStep
-from relax.typing import Observation, Action
+from dopamax.environments.environment import Environment, EnvState, TimeStep
+from dopamax.typing import Observation, Action
 
 
 class SampleBatch(dict):

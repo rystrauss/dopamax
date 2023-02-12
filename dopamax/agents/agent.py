@@ -13,10 +13,10 @@ from jax.experimental import host_callback
 from ml_collections import ConfigDict
 from tqdm import tqdm
 
-from relax.environments.environment import Environment, TimeStep, EnvState
-from relax.rollouts import SampleBatch
-from relax.spaces import Space
-from relax.typing import Observation, Action, Metrics
+from dopamax.environments.environment import Environment, TimeStep, EnvState
+from dopamax.rollouts import SampleBatch
+from dopamax.spaces import Space
+from dopamax.typing import Observation, Action, Metrics
 
 
 @dataclass(frozen=True)

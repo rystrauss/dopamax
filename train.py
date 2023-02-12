@@ -8,9 +8,9 @@ import wandb
 import yaml
 from ml_collections import ConfigDict
 
-from relax.agents.utils import get_agent_cls
-from relax.callbacks import WandbCallback
-from relax.environments import make_env
+from dopamax.agents.utils import get_agent_cls
+from dopamax.callbacks import WandbCallback
+from dopamax.environments import make_env
 
 
 @click.command()
@@ -33,7 +33,7 @@ def main(config, offline):
     agent = agent_cls(env, config.agent_config)
 
     run = wandb.init(
-        project="relax",
+        project="dopamax",
         job_type="train",
         config=config.to_dict(),
         mode="disabled" if offline else "online",

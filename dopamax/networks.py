@@ -6,8 +6,8 @@ import jax
 import jax.numpy as jnp
 from chex import Array
 
-from relax.spaces import Space, Discrete, Box
-from relax.typing import Observation
+from dopamax.spaces import Space, Discrete, Box
+from dopamax.typing import Observation
 
 _registry = {}
 

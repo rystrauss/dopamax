@@ -9,8 +9,8 @@ from brax.io import image
 from chex import dataclass, PRNGKey
 from dm_env import StepType
 
-from relax.environments.environment import Environment, EnvState, TimeStep
-from relax.typing import Action
+from dopamax.environments.environment import Environment, EnvState, TimeStep
+from dopamax.typing import Action
 
 
 @dataclass(frozen=True)

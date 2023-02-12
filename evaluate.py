@@ -12,9 +12,9 @@ from dm_env import StepType
 from ml_collections import ConfigDict
 from tqdm import tqdm
 
-from relax.agents.utils import get_agent_cls
-from relax.environments import make_env
-from relax.rollouts import rollout_episode, SampleBatch
+from dopamax.agents.utils import get_agent_cls
+from dopamax.environments import make_env
+from dopamax.rollouts import rollout_episode, SampleBatch
 
 
 @click.command()
@@ -22,7 +22,7 @@ from relax.rollouts import rollout_episode, SampleBatch
 @click.option("--num_episodes", type=click.INT, required=True, help="The number of episodes to evaluate.")
 @click.option("--render", type=click.BOOL, default=False, help="Whether to render the episodes.")
 def main(agent_artifact, num_episodes, render):
-    run = wandb.init(project="relax", job_type="evaluate", config={"num_episodes": num_episodes})
+    run = wandb.init(project="dopamax", job_type="evaluate", config={"num_episodes": num_episodes})
     artifact = run.use_artifact(agent_artifact, type="agent")
     artifact_dir = artifact.download()
 

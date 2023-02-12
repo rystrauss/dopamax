@@ -7,11 +7,11 @@ import numpy as np
 from chex import dataclass, PRNGKey
 from dm_env import StepType
 
-from relax.environments.environment import EnvState, Environment, TimeStep
-from relax.environments.mountain_car import MountainCarEnvState
-from relax.environments.utils import register
-from relax.spaces import Space, Box
-from relax.typing import Action
+from dopamax.environments.environment import EnvState, Environment, TimeStep
+from dopamax.environments.mountain_car import MountainCarEnvState
+from dopamax.environments.utils import register
+from dopamax.spaces import Space, Box
+from dopamax.typing import Action
 
 _NAME = "MountainCarContinuous"
 

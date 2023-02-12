@@ -3,8 +3,8 @@ from copy import copy
 
 import jax
 
-from relax.agents.agent import TrainState
-from relax.typing import Metrics
+from dopamax.agents.agent import TrainState
+from dopamax.typing import Metrics
 
 
 class Callback(ABC):

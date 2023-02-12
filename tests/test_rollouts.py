@@ -2,8 +2,8 @@ import chex
 import jax.numpy as jnp
 import jax.random
 
-from relax.environments import CartPole
-from relax.rollouts import create_minibatches, rollout_episode, SampleBatch
+from dopamax.environments import CartPole
+from dopamax.rollouts import create_minibatches, rollout_episode, SampleBatch
 
 
 def test_create_minibatches():

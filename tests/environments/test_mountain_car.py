@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from dm_env import StepType
 
-from relax.environments.mountain_car import MountainCar
+from dopamax.environments.mountain_car import MountainCar
 
 
 def test_mountain_car():

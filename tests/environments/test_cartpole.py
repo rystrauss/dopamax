@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from dm_env import StepType
 
-from relax.environments.cartpole import CartPole
+from dopamax.environments.cartpole import CartPole
 
 
 def test_cartpole():

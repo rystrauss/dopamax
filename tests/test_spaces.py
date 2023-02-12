@@ -1,6 +1,6 @@
 import jax
 
-from relax.spaces import Discrete, Box
+from dopamax.spaces import Discrete, Box
 import jax.numpy as jnp
 import pytest
 

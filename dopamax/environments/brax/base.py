@@ -35,7 +35,7 @@ class BraxEnvironment(Environment, ABC):
 
     @property
     def render_shape(self) -> Optional[Tuple[int, int, int]]:
-        return 400, 600, 3
+        return 600, 900, 3
 
     def reset(self, key: PRNGKey) -> Tuple[TimeStep, BraxEnvState]:
         brax_state = self._brax_env.reset(key)
@@ -79,4 +79,5 @@ class BraxEnvironment(Environment, ABC):
         return time_step, state
 
     def render(self, state: BraxEnvState) -> np.ndarray:
-        return image.render_array(self._brax_env.sys, state.brax_state.qp, width=600, height=400)
+        width, height, _ = self.render_shape
+        return image.render_array(self._brax_env.sys, state.brax_state.qp, width=width, height=height)

@@ -127,3 +127,28 @@ def get_actor_critic_model_fn(
         return policy, values
 
     return model_fn
+
+
+def get_discrete_q_network_model_fn(
+    action_space: Discrete,
+    network_build_fn: NetworkBuildFn,
+    final_hidden_units: Sequence[int] = tuple(),
+    dueling: bool = False,
+) -> Callable[[Observation], Array]:
+    def model_fn(observations: Observation) -> Array:
+        base_net = network_build_fn()
+        base_net_output = base_net(observations)
+
+        if dueling:
+            raise NotImplementedError("Dueling Q-networks are not yet implemented.")
+        else:
+            output_net = hk.Sequential(
+                [
+                    hk.nets.MLP(final_hidden_units, w_init=hk.initializers.Orthogonal(jnp.sqrt(2.0))),
+                    hk.Linear(action_space.n, w_init=hk.initializers.Orthogonal(0.01)),
+                ]
+            )
+
+        return output_net(base_net_output)
+
+    return model_fn

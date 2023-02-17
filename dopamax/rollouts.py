@@ -1,4 +1,4 @@
-from typing import Callable, Tuple, Dict
+from typing import Tuple, Dict, Protocol
 
 import einops
 import haiku as hk
@@ -30,12 +30,21 @@ class SampleBatch(dict):
     RENDER = "render"
 
 
+# Type definition for a policy function that can be used in a rollout.
+class PolicyFn(Protocol):
+    def __call__(
+        self, params: hk.Params, key: PRNGKey, observation: Observation, **kwargs
+    ) -> Tuple[Action, Dict[str, ArrayTree]]:
+        ...
+
+
 def rollout_episode(
     env: Environment,
-    policy_fn: Callable[[hk.Params, PRNGKey, Observation], Tuple[Action, Dict[str, ArrayTree]]],
+    policy_fn: PolicyFn,
     policy_params: hk.Params,
     key: PRNGKey,
     render: bool = False,
+    **policy_fn_kwargs,
 ) -> SampleBatch:
     """Rollout a single episode according to the given policy.
 
@@ -67,7 +76,7 @@ def rollout_episode(
                 vectorized=False,
             )
 
-        action, policy_info = policy_fn(policy_params, policy_key, time_step.observation)
+        action, policy_info = policy_fn(policy_params, policy_key, time_step.observation, **policy_fn_kwargs)
 
         next_time_step, next_env_state = env.step(step_key, env_state, action)
 
@@ -102,11 +111,12 @@ def rollout_episode(
 def rollout_truncated(
     env: Environment,
     num_steps: int,
-    policy_fn: Callable[[hk.Params, PRNGKey, Observation], Tuple[Action, Dict[str, ArrayTree]]],
+    policy_fn: PolicyFn,
     policy_params: hk.Params,
     key: PRNGKey,
     time_step: TimeStep,
     env_state: EnvState,
+    **policy_fn_kwargs,
 ) -> Tuple[SampleBatch, PRNGKey, EnvState, TimeStep]:
     """Rollout for a given number of steps, possibly over multiple episodes.
 
@@ -134,7 +144,7 @@ def rollout_truncated(
 
         key, step_key, reset_env_key, policy_key = jax.random.split(key, 4)
 
-        action, policy_info = policy_fn(policy_params, policy_key, time_step.observation)
+        action, policy_info = policy_fn(policy_params, policy_key, time_step.observation, **policy_fn_kwargs)
 
         next_time_step, next_env_state = env.step(step_key, env_state, action)
 

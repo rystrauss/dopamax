@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from brax.training.replay_buffers import ReplayBufferState
 from chex import dataclass, PRNGKey, Array, ArrayTree
 from dm_env import StepType
 from jax.experimental import host_callback
@@ -95,6 +96,84 @@ class TrainState:
         )
 
 
+@dataclass(frozen=True)
+class TrainStateWithReplayBuffer(TrainState):
+    buffer_state: Optional[ReplayBufferState] = None
+
+    @classmethod
+    def initial(
+        cls,
+        key: PRNGKey,
+        params: hk.Params,
+        opt_state: optax.OptState,
+        time_step: TimeStep,
+        env_state: EnvState,
+        buffer_state: ReplayBufferState,
+    ) -> "TrainStateWithReplayBuffer":
+        """Creates an initial training state.
+
+        Args:
+            key: A PRNGKey.
+            params: The initial parameters of the agent.
+            opt_state: The initial optimizer state.
+            time_step: The environment's initial time step.
+            env_state: The environment's initial state.
+            buffer_state: The replay buffer's initial state.
+
+        Returns:
+            The initial training state.
+        """
+        return cls(
+            key=key,
+            train_step=0,
+            total_timesteps=0,
+            total_episodes=0,
+            params=params,
+            opt_state=opt_state,
+            time_step=time_step,
+            env_state=env_state,
+            buffer_state=buffer_state,
+        )
+
+    def update(
+        self,
+        new_key: PRNGKey,
+        incremental_timesteps: int,
+        incremental_episodes: int,
+        new_params: hk.Params,
+        new_opt_state: optax.OptState,
+        new_time_step: TimeStep,
+        new_env_state: EnvState,
+        new_buffer_state: ReplayBufferState,
+    ) -> "TrainStateWithReplayBuffer":
+        """Updates a training state after the completion of a new training iteration.
+
+        Args:
+            new_key: A new PRNGKey.
+            incremental_timesteps: The number of timesteps collected in the new training iteration.
+            incremental_episodes: The number of episodes completed in the new training iteration.
+            new_params: The new parameters of the agent.
+            new_opt_state: The new optimizer state.
+            new_time_step: The new environment time step.
+            new_env_state: The new environment state.
+            new_buffer_state: The new replay buffer state.
+
+        Returns:
+            The updated training state.
+        """
+        return TrainStateWithReplayBuffer(
+            key=new_key,
+            train_step=self.train_step + 1,
+            total_timesteps=self.total_timesteps + incremental_timesteps,
+            total_episodes=self.total_episodes + incremental_episodes,
+            params=new_params,
+            opt_state=new_opt_state,
+            time_step=new_time_step,
+            env_state=new_env_state,
+            buffer_state=new_buffer_state,
+        )
+
+
 class Agent(ABC):
     """Abstract base class for an RL agent.
 
@@ -137,7 +216,7 @@ class Agent(ABC):
         return ConfigDict(
             {
                 "num_devices": 1,
-                "num_envs_per_device": 4,
+                "num_envs_per_device": 1,
             }
         )
 

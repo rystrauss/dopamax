@@ -22,36 +22,56 @@ from dopamax.typing import Metrics, Observation, Action
 
 _DEFAULT_DQN_CONFIG = ConfigDict(
     {
-        "final_hidden_units": (),
-        "dueling": False,
-        "double": True,
+        # The initial epsilon value for epsilon-greedy exploration.
         "initial_epsilon": 1.0,
+        # The final epsilon value for epsilon-greedy exploration.
         "final_epsilon": 0.02,
+        # The number of training steps over which to anneal epsilon.
         "epsilon_decay_steps": 10000,
+        # The discount factor.
         "gamma": 0.99,
+        # The learning rate.
         "learning_rate": 5e-4,
+        # The number of training steps to take before beginning gradient updates.
         "learning_starts": 1000,
+        # The size of experience batches to sample from the replay buffer and learn on.
         "batch_size": 32,
+        # The maximum size of the replay buffer.
         "buffer_size": 10000,
-        "train_freq": 1,
+        # The frequency with which the target network is updated.
         "target_update_freq": 500,
+        # The type of network to use.
         "network": "mlp",
+        # The configuration dictionary for the network.
         "network_config": {"hidden_units": [64, 64]},
+        # Whether to use double q-learning.
+        "double": True,
     }
 )
 
 
 @register("DQN")
 class DQN(Agent):
+    """Deep Q-Network (DQN) agent.
+
+    This is a simple DQN implementation that is very close to the original paper. It doesn't have a lot of the more
+    recent bells and whistles that have been developed.
+
+    Args:
+        env: The environment to interact with.
+        config: The configuration dictionary for the agent.
+
+    References:
+        https://www.nature.com/articles/nature14236
+    """
+
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
 
         assert isinstance(self.env.action_space, Discrete), "DQN only supports discrete action spaces."
 
         network_build_fn = get_network_build_fn(self.config.network, **self.config.network_config)
-        model_fn = get_discrete_q_network_model_fn(
-            env.action_space, network_build_fn, self.config.final_hidden_units, self.config.dueling
-        )
+        model_fn = get_discrete_q_network_model_fn(env.action_space, network_build_fn, (), False)
         self._model = hk.transform(model_fn)
 
         def policy_fn(
@@ -215,6 +235,23 @@ class DQN(Agent):
             new_time_step=new_time_step,
             new_env_state=new_env_state,
             new_buffer_state=new_buffer_state,
+        )
+
+        warmup_train_state = train_state.update(
+            new_key=next_train_state_key,
+            incremental_timesteps=incremental_timesteps,
+            incremental_episodes=incremental_episodes,
+            new_params=train_state.params,
+            new_opt_state=train_state.opt_state,
+            new_time_step=new_time_step,
+            new_env_state=new_env_state,
+            new_buffer_state=new_buffer_state,
+        )
+
+        next_train_state = jax.tree_map(
+            lambda a, b: jax.lax.select(jnp.any(train_state.train_step > self.config.learning_starts), a, b),
+            next_train_state,
+            warmup_train_state,
         )
 
         return next_train_state, metrics

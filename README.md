@@ -6,7 +6,7 @@
 
 <p>
        <a href="https://pypi.python.org/pypi/dopamax">
-        <img src="https://img.shields.io/pypi/pyversions/dopamax.svg?style=flat-square" /></a>
+        <img src="https://img.shields.io/pypi/pyversions/dopamax.svg" /></a>
        <a href= "https://badge.fury.io/py/dopamax">
         <img src="https://badge.fury.io/py/dopamax.svg" /></a>
        <a href= "https://github.com/rystrau/dopamax/blob/master/LICENSE.md">
@@ -31,10 +31,13 @@ Anakin Podracer architecture -- see [this paper][2] for more details.
 Dopamax can be installed with:
 
 ```bash
-pip install git+https://github.com/rystrauss/dopamax.git
+pip install dopamax
 ```
 
 This will install the `dopamax` Python package, as well as a command-line interface (CLI) for training and evaluation.
+Note that only the CPU version of JAX is installed by default. If you would like to use a GPU or TPU, you will need to
+install the appropriate version of JAX. See the
+[JAX installation instructions](https://github.com/google/jax#installation).
 
 ## Usage
 

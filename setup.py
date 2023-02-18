@@ -1,3 +1,5 @@
+import setuptools
+
 try:
     from setuptools import setup
 except ImportError:
@@ -25,11 +27,15 @@ setup(
         "Operating System :: OS Independent",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
-    packages=["dopamax"],
+    packages=setuptools.find_packages(),
     include_package_data=True,
-    zip_safe=False,
     platforms="any",
     python_requires=">=3.10",
+    entry_points={
+        "console_scripts": [
+            "dopamax=dopamax._scripts.cli:cli",
+        ],
+    },
     install_requires=[
         "jax>=0.4.4",
         "chex>=0.1.6",

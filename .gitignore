@@ -3,3 +3,5 @@
 __pycache__
 wandb
 artifacts
+build
+dopamax.egg-info

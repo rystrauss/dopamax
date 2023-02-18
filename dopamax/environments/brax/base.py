@@ -79,5 +79,5 @@ class BraxEnvironment(Environment, ABC):
         return time_step, state
 
     def render(self, state: BraxEnvState) -> np.ndarray:
-        width, height, _ = self.render_shape
+        height, width, _ = self.render_shape
         return image.render_array(self._brax_env.sys, state.brax_state.qp, width=width, height=height)

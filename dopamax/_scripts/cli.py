@@ -33,7 +33,7 @@ def cli():
     required=True,
     help="Path to the training config YAML file.",
 )
-@click.option("--offline", is_flag=True, help="Run in offline mode.")
+@click.option("--offline", is_flag=True, help="Run in offline mode, without logging to W&B.")
 def train(config, offline):
     """Trains an agent using the provided config file, and logs results to W&B."""
     with open(config, "r") as f:

@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from copy import copy
 
 import jax
+from wandb.sdk.wandb_run import Run
 
 from dopamax.agents.agent import TrainState
 from dopamax.typing import Metrics
@@ -34,7 +35,7 @@ class WandbCallback(Callback):
         run: The wandb run to log to.
     """
 
-    def __init__(self, run: "wandb.sdk.wandb_run.Run"):
+    def __init__(self, run: Run):
         self._run = run
 
     def on_train_step(self, train_state: TrainState, metrics: Metrics):

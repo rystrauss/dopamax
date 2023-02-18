@@ -12,6 +12,12 @@ CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
 with open(os.path.join(CURRENT_DIR, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
+with open(os.path.join(CURRENT_DIR, "requirements.txt")) as f:
+    requirements = f.read().splitlines()
+
+with open(os.path.join(CURRENT_DIR, "test-requirements.txt")) as f:
+    test_requirements = f.read().splitlines()
+
 setup(
     name="dopamax",
     version="0.1.0",
@@ -36,27 +42,6 @@ setup(
             "dopamax=dopamax._scripts.cli:cli",
         ],
     },
-    install_requires=[
-        "jax>=0.4.4",
-        "chex>=0.1.6",
-        "brax>=0.1.1",
-        "click>=8.1.3",
-        "distrax>=0.1.3",
-        "dm-env>=1.6",
-        "dm-haiku>=0.0.9",
-        "einops>=0.6.0",
-        "ffmpeg>=1.4",
-        "imageio>=2.25.1",
-        "moviepy>=1.0.3",
-        "ml-collections>=0.1.1",
-        "pygame>=2.1.3",
-        "numpy>=1.22.4",
-        "rlax>=0.1.5",
-        "tqdm>=4.64.1",
-        "wandb>=0.13.10",
-    ],
-    tests_require=[
-        "pytest",
-        "gymnasium==0.27.0",
-    ],
+    install_requires=requirements,
+    tests_require=test_requirements,
 )

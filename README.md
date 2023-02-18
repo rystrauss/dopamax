@@ -3,7 +3,12 @@
 [2]: https://arxiv.org/abs/2104.06272
 
 # Dopamax
+
 <p>
+       <a href="https://pypi.python.org/pypi/dopamax">
+        <img src="https://img.shields.io/pypi/pyversions/dopamax.svg?style=flat-square" /></a>
+       <a href= "https://badge.fury.io/py/dopamax">
+        <img src="https://badge.fury.io/py/dopamax.svg" /></a>
        <a href= "https://github.com/rystrau/dopamax/blob/master/LICENSE.md">
         <img src="https://img.shields.io/badge/license-MIT-blue.svg" /></a>
        <a href= "https://github.com/psf/black">

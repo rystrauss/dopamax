@@ -140,7 +140,27 @@ def get_discrete_q_network_model_fn(
         base_net_output = base_net(observations)
 
         if dueling:
-            raise NotImplementedError("Dueling Q-networks are not yet implemented.")
+            assert (
+                final_hidden_units
+            ), "Dueling networks must have at least one hidden layer provided in `final_hidden_units`."
+
+            advantage_net = hk.Sequential(
+                [
+                    hk.nets.MLP(final_hidden_units, w_init=hk.initializers.Orthogonal(jnp.sqrt(2.0))),
+                    hk.Linear(action_space.n, w_init=hk.initializers.Orthogonal(0.01)),
+                ]
+            )
+            value_net = hk.Sequential(
+                [
+                    hk.nets.MLP(final_hidden_units, w_init=hk.initializers.Orthogonal(jnp.sqrt(2.0))),
+                    hk.Linear(1, w_init=hk.initializers.Orthogonal(0.01)),
+                ]
+            )
+
+            advantage_stream = advantage_net(base_net_output)
+            value_stream = value_net(base_net_output)
+
+            output = value_stream + (advantage_stream - jnp.mean(advantage_stream, axis=-1, keepdims=True))
         else:
             output_net = hk.Sequential(
                 [
@@ -149,6 +169,8 @@ def get_discrete_q_network_model_fn(
                 ]
             )
 
-        return output_net(base_net_output)
+            output = output_net(base_net_output)
+
+        return output
 
     return model_fn

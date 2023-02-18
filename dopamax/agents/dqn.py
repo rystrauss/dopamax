@@ -46,6 +46,11 @@ _DEFAULT_DQN_CONFIG = ConfigDict(
         "network_config": {"hidden_units": [64, 64]},
         # Whether to use double q-learning.
         "double": True,
+        # Whether to use a dueling q-network architecture..
+        "dueling": False,
+        # Additional fully-connected layers to add after the base network before the output layer. At least one layer
+        # must be added when using the dueling architecture.
+        "final_hidden_units": (),
     }
 )
 
@@ -71,7 +76,9 @@ class DQN(Agent):
         assert isinstance(self.env.action_space, Discrete), "DQN only supports discrete action spaces."
 
         network_build_fn = get_network_build_fn(self.config.network, **self.config.network_config)
-        model_fn = get_discrete_q_network_model_fn(env.action_space, network_build_fn, (), False)
+        model_fn = get_discrete_q_network_model_fn(
+            env.action_space, network_build_fn, self.config.final_hidden_units, self.config.dueling
+        )
         self._model = hk.transform(model_fn)
 
         def policy_fn(

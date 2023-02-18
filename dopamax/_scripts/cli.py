@@ -134,3 +134,31 @@ def evaluate(agent_artifact, num_episodes, render):
         ]
 
     run.log(to_log)
+
+
+@cli.command(short_help="Print the default config for a given agent.")
+@click.argument("agent", type=click.STRING)
+def agent_config(agent):
+    """Prints the default config for AGENT."""
+    agent_cls = get_agent_cls(agent)
+    print(yaml.dump(agent_cls.default_config().to_dict(), sort_keys=False))
+
+
+@cli.command(short_help="Lists all available agents.")
+def list_agents():
+    """Lists all available agents."""
+    from dopamax.agents.utils import _registry
+
+    print("Available agents:")
+    for agent_name in sorted(_registry.keys()):
+        print("  -", agent_name)
+
+
+@cli.command(short_help="Lists all available environments.")
+def list_environments():
+    """Lists all available environments."""
+    from dopamax.environments.utils import _registry
+
+    print("Available environments:")
+    for agent_name in sorted(_registry.keys()):
+        print("  -", agent_name)

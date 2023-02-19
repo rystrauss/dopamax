@@ -1,6 +1,6 @@
 import jax
 
-from dopamax.spaces import Discrete, Box
+from dopamax.spaces import Discrete, Box, Dict
 import jax.numpy as jnp
 import pytest
 
@@ -52,3 +52,36 @@ def test_box(low, high, shape):
         sample = space.sample(jax.random.PRNGKey(i))
         assert sample.shape == space.shape
         assert sample in space
+
+
+def test_dict():
+    """Unit test for the Dict space."""
+    space = Dict(
+        {
+            "a": Discrete(10),
+            "b": Box(0, 5, (1,)),
+            "c": Box(-jnp.inf, 100, (200,)),
+            "d": Box(-jnp.inf, jnp.inf, (20, 50)),
+            "e": Box(-10, 10, None),
+            "f": Box(jnp.array([1, 2, 3, 4, 5]), 10, None),
+        }
+    )
+
+    assert space.shape == {"a": (), "b": (1,), "c": (200,), "d": (20, 50), "e": (), "f": (5,)}
+    assert space.dtype == {
+        "a": jnp.int32,
+        "b": jnp.float32,
+        "c": jnp.float32,
+        "d": jnp.float32,
+        "e": jnp.float32,
+        "f": jnp.float32,
+    }
+
+    for i in range(100):
+        sample = space.sample(jax.random.PRNGKey(i))
+        assert sample in space
+
+        assert sample["a"] in space["a"]
+        assert sample["b"] in space["b"]
+        assert sample["c"] in space["c"]
+        assert sample["d"] in space["d"]

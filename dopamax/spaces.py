@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Any, Optional
+from collections import OrderedDict
+import typing
 
 import jax
 import jax.numpy as jnp
@@ -22,7 +23,7 @@ class Space(ABC):
 
     @property
     @abstractmethod
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> typing.Tuple[int, ...]:
         """The shape of the space."""
         pass
 
@@ -72,7 +73,7 @@ class Discrete(Space):
         self._n = n
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> typing.Tuple[int, ...]:
         return ()
 
     def sample(self, key: PRNGKey) -> ArrayTree:
@@ -88,7 +89,7 @@ class Discrete(Space):
     def __repr__(self):
         return f"Discrete({self._n})"
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: typing.Any) -> bool:
         return isinstance(other, Discrete) and self.n == other.n
 
 
@@ -106,7 +107,7 @@ class Box(Space):
         self,
         low: Array | Scalar,
         high: Array | Scalar,
-        shape: Optional[Tuple[int, ...]] = None,
+        shape: typing.Optional[typing.Tuple[int, ...]] = None,
         dtype: jnp.dtype = jnp.float32,
     ):
         super().__init__(dtype)
@@ -142,7 +143,7 @@ class Box(Space):
         return jnp.inf > self.high
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> typing.Tuple[int, ...]:
         return self._low.shape
 
     def sample(self, key: PRNGKey) -> ArrayTree:
@@ -184,9 +185,40 @@ class Box(Space):
     def __repr__(self):
         return f"Box(low={self.low}, high={self.high})"
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: typing.Any) -> bool:
         return (
             isinstance(other, Box)
             and jnp.array_equal(self.low == other.low)
             and jnp.array_equal(self.high == other.high)
         )
+
+
+class Dict(Space):
+    """A space representing a dictionary of other spaces.
+
+    Args:
+        spaces: A dictionary of spaces.
+    """
+
+    def __init__(self, spaces: typing.Dict[typing.Hashable, Space]):
+        dtype = jax.tree_map(lambda s: s.dtype, spaces)
+        super().__init__(dtype)
+
+        self.spaces = spaces
+
+    def __getitem__(self, item: typing.Hashable):
+        return self.spaces[item]
+
+    @property
+    def shape(self) -> typing.Tuple[int, ...]:
+        return jax.tree_map(lambda s: s.shape, self.spaces)
+
+    def sample(self, key: PRNGKey) -> ArrayTree:
+        sample_keys = jax.random.split(key, len(self.spaces))
+        return OrderedDict([(k, self.spaces[k].sample(sample_keys[i])) for i, k in enumerate(self.spaces)])
+
+    def contains(self, item: ArrayTree) -> bool:
+        out_of_space = 0
+        for k, space in self.spaces.items():
+            out_of_space += 1 - space.contains(item[k])
+        return out_of_space == 0

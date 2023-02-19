@@ -38,6 +38,7 @@ setup(
     },
     install_requires=[
         "jax==0.4.3",
+        "jaxlib==0.4.3",
         "chex>=0.1.6",
         "brax>=0.1.1",
         "click>=8.1.3",

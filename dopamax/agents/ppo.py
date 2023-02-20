@@ -1,6 +1,7 @@
 from functools import partial
 from typing import Tuple, Dict
 
+import chex
 import distrax
 import haiku as hk
 import jax
@@ -86,7 +87,8 @@ class PPO(Agent):
         def policy_fn(params: hk.Params, key: PRNGKey, observation: Observation) -> Tuple[Action, Dict[str, ArrayTree]]:
             model_key, sample_key = jax.random.split(key)
 
-            pi, values = self._model.apply(params, model_key, observation)
+            pi, values = hk.expand_apply(partial(self._model.apply, params, model_key))(observation)
+
             action, action_logp = pi.sample_and_log_prob(seed=sample_key)
 
             return action, {
@@ -116,7 +118,9 @@ class PPO(Agent):
     def compute_action(
         self, params: hk.Params, key: PRNGKey, observation: Observation, deterministic: bool = True
     ) -> Action:
-        pi, _ = self._model.apply(params, key, observation)
+        jax.tree_map(chex.assert_shape, observation, self.env.observation_space.shape)
+
+        pi, _ = hk.expand_apply(partial(self._model.apply, params, key))(observation)
 
         if deterministic:
             if isinstance(pi, distrax.Categorical):

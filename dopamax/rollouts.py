@@ -1,5 +1,6 @@
 from typing import Tuple, Dict, Protocol
 
+import chex
 import einops
 import haiku as hk
 import jax
@@ -44,6 +45,7 @@ def rollout_episode(
     policy_params: hk.Params,
     key: PRNGKey,
     render: bool = False,
+    pass_env_state_to_policy: bool = False,
     **policy_fn_kwargs,
 ) -> SampleBatch:
     """Rollout a single episode according to the given policy.
@@ -55,6 +57,7 @@ def rollout_episode(
         policy_params: The policy parameters to feed into the policy function.
         key: A PRNG key.
         render: Whether to include environment renders in the rollout.
+        pass_env_state_to_policy: Whether to pass the environment state to the policy function.
 
     Returns:
         A dictionary containing trajectory data from the rollout.
@@ -76,6 +79,10 @@ def rollout_episode(
                 vectorized=False,
             )
 
+        if pass_env_state_to_policy:
+            policy_fn_kwargs["env_state"] = env_state
+
+        jax.tree_map(chex.assert_shape, time_step.observation, env.observation_space.shape)
         action, policy_info = policy_fn(policy_params, policy_key, time_step.observation, **policy_fn_kwargs)
 
         next_time_step, next_env_state = env.step(step_key, env_state, action)
@@ -144,6 +151,7 @@ def rollout_truncated(
 
         key, step_key, reset_env_key, policy_key = jax.random.split(key, 4)
 
+        jax.tree_map(chex.assert_shape, time_step.observation, env.observation_space.shape)
         action, policy_info = policy_fn(policy_params, policy_key, time_step.observation, **policy_fn_kwargs)
 
         next_time_step, next_env_state = env.step(step_key, env_state, action)

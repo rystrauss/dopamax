@@ -1,6 +1,7 @@
 from functools import partial
 from typing import Tuple, Dict
 
+import chex
 import distrax
 import haiku as hk
 import jax
@@ -86,7 +87,7 @@ class DQN(Agent):
         ) -> Tuple[Action, Dict[str, ArrayTree]]:
             model_key, sample_key = jax.random.split(key)
 
-            preferences = self._model.apply(params, model_key, observation)
+            preferences = hk.expand_apply(partial(self._model.apply, params, model_key))(observation)
             action = distrax.EpsilonGreedy(preferences, epsilon).sample(seed=sample_key)
 
             return action, {}
@@ -108,7 +109,6 @@ class DQN(Agent):
             epsilon=1.0,
         )
 
-        # TODO: Maybe wrap buffer for pmap, and check key if so.
         self._buffer = UniformSamplingQueue(self.config.buffer_size, rollout_data, self.config.batch_size)
 
     @staticmethod
@@ -125,7 +125,8 @@ class DQN(Agent):
         observation: Observation,
         deterministic: bool = True,
     ) -> Action:
-        preferences = self._model.apply(params["online"], key, observation)
+        jax.tree_map(chex.assert_shape, observation, self.env.observation_space.shape)
+        preferences = hk.expand_apply(partial(self._model.apply, params["online"], key))(observation)
         pi = distrax.Categorical(logits=preferences)
         return pi.mode() if deterministic else pi.sample(seed=key)
 

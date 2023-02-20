@@ -6,7 +6,8 @@ import numpy as np
 from chex import PRNGKey, dataclass, Array
 from dm_env import StepType
 
-from dopamax.environments.environment import Environment, EnvState, TimeStep
+from dopamax.environments.environment import TimeStep
+from dopamax.environments.two_player.base import TwoPlayerZeroSumEnvState, TwoPlayerZeroSumEnvironment
 from dopamax.environments.utils import register
 from dopamax.spaces import Space, Discrete, Box, Dict
 from dopamax.typing import Action, Observation
@@ -35,24 +36,24 @@ def _build_win_checker():
 
 
 @dataclass(frozen=True)
-class ConnectFourEnvState(EnvState):
+class ConnectFourEnvState(TwoPlayerZeroSumEnvState):
     episode_reward: float
     episode_length: float
+    current_player: int
     time: int
     board: Array
     column_counts: Array
-    current_player: int
 
     def to_obs(self) -> Observation:
         return {
-            "board": self.board[::-1, :],
-            "valid_actions": (self.column_counts < self.board.shape[0]).astype(jnp.float32),
+            "observation": self.board[::-1, :],
+            "invalid_actions": (self.column_counts >= self.board.shape[0]).astype(jnp.float32),
         }
 
 
 @register(_NAME)
 @dataclass(frozen=True)
-class ConnectFour(Environment):
+class ConnectFour(TwoPlayerZeroSumEnvironment):
     _num_rows: int = 6
     _num_cols: int = 7
     _win_checker: Callable = _build_win_checker()
@@ -69,8 +70,8 @@ class ConnectFour(Environment):
     def observation_space(self) -> Space:
         return Dict(
             {
-                "board": Box(low=-1, high=1, shape=(self._num_rows, self._num_cols)),
-                "valid_actions": Box(low=0, high=1, shape=(self._num_cols,)),
+                "observation": Box(low=-1, high=1, shape=(self._num_rows, self._num_cols)),
+                "invalid_actions": Box(low=0, high=1, shape=(self._num_cols,)),
             }
         )
 
@@ -139,7 +140,7 @@ class ConnectFour(Environment):
         time_step = TimeStep(
             observation=state.to_obs(),
             reward=reward,
-            discount=1.0 - jnp.float32(terminated),
+            discount=current_player * jnp.float32(~terminated),
             step_type=jax.lax.select(terminated, StepType.LAST, StepType.MID),
         )
 

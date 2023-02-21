@@ -38,6 +38,7 @@ jobs:
         python -m pip install "einops>=0.6.0"
         python -m pip install "ffmpeg>=1.4"
         python -m pip install "imageio>=2.25.1"
+        python -m pip install "mctx==0.0.2"
         python -m pip install "moviepy>=1.0.3"
         python -m pip install "ml-collections>=0.1.1"
         python -m pip install "pygame>=2.1.3"

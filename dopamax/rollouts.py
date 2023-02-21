@@ -123,6 +123,7 @@ def rollout_truncated(
     key: PRNGKey,
     time_step: TimeStep,
     env_state: EnvState,
+    pass_env_state_to_policy: bool = False,
     **policy_fn_kwargs,
 ) -> Tuple[SampleBatch, PRNGKey, EnvState, TimeStep]:
     """Rollout for a given number of steps, possibly over multiple episodes.
@@ -138,6 +139,7 @@ def rollout_truncated(
         key: A PRNG key.
         time_step: The initial time step.
         env_state: The initial environment state.
+        pass_env_state_to_policy: Whether to pass the environment state to the policy function.
 
     Returns:
         rollout_data: A dictionary containing trajectory data from the rollout.
@@ -150,6 +152,9 @@ def rollout_truncated(
         key, time_step, env_state = carry
 
         key, step_key, reset_env_key, policy_key = jax.random.split(key, 4)
+
+        if pass_env_state_to_policy:
+            policy_fn_kwargs["env_state"] = env_state
 
         jax.tree_map(chex.assert_shape, time_step.observation, env.observation_space.shape)
         action, policy_info = policy_fn(policy_params, policy_key, time_step.observation, **policy_fn_kwargs)

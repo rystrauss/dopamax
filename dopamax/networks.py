@@ -67,6 +67,7 @@ def get_actor_critic_model_fn(
     network_build_fn: NetworkBuildFn,
     value_network: Optional[str] = None,
     free_log_std: bool = False,
+    tanh_value: bool = False,
 ) -> Callable[[Observation], distrax.Distribution | Tuple[distrax.Distribution, Array]]:
     """Gets a model function for a generic actor-critic agent.
 
@@ -82,6 +83,7 @@ def get_actor_critic_model_fn(
             (excluding the output layer).
         free_log_std: If True, the scales of Gaussian policies will be learned as free parameters. Otherwise, they will
             be functions of the observations.
+        tanh_value: If True, the value estimate will be passed through a tanh activation function.
 
     Returns:
         A model function for the specified actor-critic agent.
@@ -124,6 +126,10 @@ def get_actor_critic_model_fn(
             raise ValueError(f"Unsupported value network: {value_network}")
 
         values = jnp.squeeze(values, axis=-1)
+
+        if tanh_value:
+            values = jax.nn.tanh(values)
+
         return policy, values
 
     return model_fn

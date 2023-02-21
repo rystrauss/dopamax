@@ -48,6 +48,7 @@ setup(
         "einops>=0.6.0",
         "ffmpeg>=1.4",
         "imageio>=2.25.1",
+        "mctx==0.0.2",
         "moviepy>=1.0.3",
         "ml-collections>=0.1.1",
         "pygame>=2.1.3",

@@ -12,7 +12,7 @@ from dm_env import StepType
 from mctx._src.base import RecurrentState, RecurrentFnOutput
 from ml_collections import ConfigDict
 
-from dopamax.agents.agent import Agent, TrainState, TrainStateWithReplayBuffer
+from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainState, AnakinTrainStateWithReplayBuffer
 from dopamax.agents.utils import register
 from dopamax.environments.environment import Environment, EnvState
 from dopamax.environments.two_player.base import TwoPlayerZeroSumEnvironment
@@ -46,8 +46,9 @@ _DEFAULT_ALPHAZERO_CONFIG = ConfigDict(
     }
 )
 
+
 @register("AlphaZero")
-class AlphaZero(Agent):
+class AlphaZero(AnakinAgent):
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
 
@@ -198,20 +199,22 @@ class AlphaZero(Agent):
         policy_output, value = jax.tree_map(lambda x: jnp.squeeze(x, axis=0), (policy_output, value))
         return policy_output.action
 
-    def _initial_train_state_without_replay_buffer(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> TrainState:
+    def _initial_train_state_without_replay_buffer(
+        self, consistent_key: PRNGKey, divergent_key: PRNGKey
+    ) -> AnakinTrainState:
         train_state_key, env_key = jax.random.split(divergent_key)
         sample_obs = jnp.expand_dims(self.env.observation_space.sample(consistent_key)["observation"], 0)
         params = self._model.init(consistent_key, sample_obs)
         time_step, env_state = self.env.reset(env_key)
         opt_state = self._optimizer.init(params)
 
-        return TrainState.initial(train_state_key, params, opt_state, time_step, env_state)
+        return AnakinTrainState.initial(train_state_key, params, opt_state, time_step, env_state)
 
-    def initial_train_state(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> TrainStateWithReplayBuffer:
+    def initial_train_state(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> AnakinTrainStateWithReplayBuffer:
         train_state_without_replay_buffer = self._initial_train_state_without_replay_buffer(
             consistent_key, divergent_key
         )
-        return TrainStateWithReplayBuffer(
+        return AnakinTrainStateWithReplayBuffer(
             **dict(train_state_without_replay_buffer), buffer_state=self._buffer.init(consistent_key)
         )
 
@@ -241,7 +244,9 @@ class AlphaZero(Agent):
 
         return new_params, new_opt_state, info
 
-    def train_step(self, train_state: TrainStateWithReplayBuffer) -> Tuple[TrainStateWithReplayBuffer, Metrics]:
+    def train_step(
+        self, train_state: AnakinTrainStateWithReplayBuffer
+    ) -> Tuple[AnakinTrainStateWithReplayBuffer, Metrics]:
         next_train_state_key, rollout_key, initial_update_key = jax.random.split(train_state.key, 3)
 
         rollout_data, _, new_time_step, new_env_state = self._rollout_fn(

@@ -1,6 +1,6 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections import deque
-from typing import Tuple, Optional, Sequence, Any
+from typing import Optional, Sequence, Tuple, Any
 
 import haiku as hk
 import jax
@@ -8,21 +8,20 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 from brax.training.replay_buffers import ReplayBufferState
-from chex import dataclass, PRNGKey, Array, ArrayTree
+from chex import PRNGKey, Array, ArrayTree, dataclass
 from dm_env import StepType
 from jax.experimental import host_callback
 from ml_collections import ConfigDict
 from tqdm import tqdm
 
+from dopamax.agents.base import Agent, TrainState
 from dopamax.environments.environment import Environment, TimeStep, EnvState
 from dopamax.rollouts import SampleBatch
-from dopamax.spaces import Space
-from dopamax.typing import Observation, Action, Metrics
 
 
 @dataclass(frozen=True)
-class TrainState:
-    """Dataclass for storing the training state of an agent."""
+class AnakinTrainState(TrainState):
+    """Dataclass for storing the training state of an Anakin agent."""
 
     key: PRNGKey
     train_step: int
@@ -36,7 +35,7 @@ class TrainState:
     @classmethod
     def initial(
         cls, key: PRNGKey, params: hk.Params, opt_state: optax.OptState, time_step: TimeStep, env_state: EnvState
-    ) -> "TrainState":
+    ) -> "AnakinTrainState":
         """Creates an initial training state.
 
         Args:
@@ -69,7 +68,7 @@ class TrainState:
         new_opt_state: optax.OptState,
         new_time_step: TimeStep,
         new_env_state: EnvState,
-    ) -> "TrainState":
+    ) -> "AnakinTrainState":
         """Updates a training state after the completion of a new training iteration.
 
         Args:
@@ -84,7 +83,7 @@ class TrainState:
         Returns:
             The updated training state.
         """
-        return TrainState(
+        return AnakinTrainState(
             key=new_key,
             train_step=self.train_step + 1,
             total_timesteps=self.total_timesteps + incremental_timesteps,
@@ -97,8 +96,8 @@ class TrainState:
 
 
 @dataclass(frozen=True)
-class TrainStateWithReplayBuffer(TrainState):
-    buffer_state: Optional[ReplayBufferState] = None
+class AnakinTrainStateWithReplayBuffer(AnakinTrainState):
+    buffer_state: ReplayBufferState
 
     @classmethod
     def initial(
@@ -109,7 +108,7 @@ class TrainStateWithReplayBuffer(TrainState):
         time_step: TimeStep,
         env_state: EnvState,
         buffer_state: ReplayBufferState,
-    ) -> "TrainStateWithReplayBuffer":
+    ) -> "AnakinTrainStateWithReplayBuffer":
         """Creates an initial training state.
 
         Args:
@@ -145,7 +144,7 @@ class TrainStateWithReplayBuffer(TrainState):
         new_time_step: TimeStep,
         new_env_state: EnvState,
         new_buffer_state: ReplayBufferState,
-    ) -> "TrainStateWithReplayBuffer":
+    ) -> "AnakinTrainStateWithReplayBuffer":
         """Updates a training state after the completion of a new training iteration.
 
         Args:
@@ -161,7 +160,7 @@ class TrainStateWithReplayBuffer(TrainState):
         Returns:
             The updated training state.
         """
-        return TrainStateWithReplayBuffer(
+        return AnakinTrainStateWithReplayBuffer(
             key=new_key,
             train_step=self.train_step + 1,
             total_timesteps=self.total_timesteps + incremental_timesteps,
@@ -174,97 +173,29 @@ class TrainStateWithReplayBuffer(TrainState):
         )
 
 
-class Agent(ABC):
-    """Abstract base class for an RL agent.
+_DEFAULT_ANAKIN_CONFIG = ConfigDict(
+    {
+        "num_devices": 1,
+        "num_envs_per_device": 1,
+    }
+)
 
-    Subclasses are intended to be implemented in accordance with the Anakin Podracer architecture.
-    See: https://arxiv.org/abs/2104.06272
 
-    This means that we assume the agent's train step can be vectorized across a batch within each device, and can be
-    further parallelized across multiple devices.
-
-    Args:
-        env: The environment to interact with.
-        config: The configuration dictionary for the agent.
-    """
-
+class AnakinAgent(Agent, ABC):
     batch_axis = "batch_axis"
     device_axis = "device_axis"
 
     def __init__(self, env: Environment, config: ConfigDict):
-        self._env = env
-        self._config = self.default_config()
-        self._config.update(config)
-        self._config.lock()
+        super().__init__(env, config)
 
         self._reward_buffer = deque(maxlen=100)
         self._length_buffer = deque(maxlen=100)
 
-    @property
-    def env(self) -> Environment:
-        """The environment that the agent interacts with."""
-        return self._env
-
-    @property
-    def config(self) -> ConfigDict:
-        """The configuration dictionary for the agent."""
-        return self._config
-
     @staticmethod
     def default_config() -> ConfigDict:
-        """Returns the default configuration dictionary for all agents."""
-        return ConfigDict(
-            {
-                "num_devices": 1,
-                "num_envs_per_device": 1,
-            }
-        )
-
-    @property
-    def observation_space(self) -> Space:
-        """The observation space of the agent's environment."""
-        return self._env.observation_space
-
-    @property
-    def action_space(self) -> Space:
-        """The action space of the agent's environment."""
-        return self._env.action_space
-
-    @abstractmethod
-    def compute_action(
-        self, params: hk.Params, key: PRNGKey, observation: Observation, deterministic: bool = True
-    ) -> Action:
-        pass
-
-    @abstractmethod
-    def initial_train_state(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> TrainState:
-        """Initializes the agent's training state.
-
-        Args:
-            consistent_key: A PRNGKey that is used to initialize pieces of the train state which should be
-                consistent across all devices (e.g. network parameters).
-            divergent_key: A PRNGKey that is used to initialize pieces of the train state which should be
-                different across all devices (e.g. environment state).
-
-        Returns:
-            The initial training state.
-        """
-        pass
-
-    @abstractmethod
-    def train_step(self, train_state: TrainState) -> Tuple[TrainState, Metrics]:
-        """Performs a single training step.
-
-        A training step should include experience collection and parameter updates.
-
-        Args:
-            train_state: The current training state.
-
-        Returns:
-            train_state: The updated training state.
-            metrics: A dictionary of metrics to be logged.
-        """
-        pass
+        config = super(AnakinAgent, AnakinAgent).default_config()
+        config.update(_DEFAULT_ANAKIN_CONFIG)
+        return config
 
     def _episode_buffer_update_fn(self, args: Tuple[Array, Array], transforms: Any):
         """Updates the episode reward and length buffers with new data."""

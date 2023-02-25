@@ -12,10 +12,10 @@ from chex import PRNGKey, ArrayTree
 from dm_env import StepType
 from ml_collections import ConfigDict
 
-from dopamax.agents.agent import Agent, TrainState
+from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainState
+from dopamax.agents.anakin.utils import explained_variance
 from dopamax.agents.utils import register
 from dopamax.environments.environment import Environment
-from dopamax.math import explained_variance
 from dopamax.networks import get_actor_critic_model_fn, get_network_build_fn
 from dopamax.rollouts import rollout_truncated, SampleBatch, create_minibatches
 from dopamax.typing import Metrics, Observation, Action
@@ -61,7 +61,7 @@ _DEFAULT_PPO_CONFIG = ConfigDict(
 
 
 @register("PPO")
-class PPO(Agent):
+class PPO(AnakinAgent):
     """Proximal Policy Optimization (PPO) agent.
 
     Args:
@@ -130,14 +130,14 @@ class PPO(Agent):
         else:
             return pi.sample(key)
 
-    def initial_train_state(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> TrainState:
+    def initial_train_state(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> AnakinTrainState:
         train_state_key, env_key = jax.random.split(divergent_key)
         sample_obs = jnp.expand_dims(self.env.observation_space.sample(consistent_key), 0)
         params = self._model.init(consistent_key, sample_obs)
         time_step, env_state = self.env.reset(env_key)
         opt_state = self._optimizer.init(params)
 
-        return TrainState.initial(train_state_key, params, opt_state, time_step, env_state)
+        return AnakinTrainState.initial(train_state_key, params, opt_state, time_step, env_state)
 
     def _loss(self, params, key, obs, actions, advantages, returns, old_log_probs, clip):
         pi, value_preds = self._model.apply(params, key, obs)
@@ -180,7 +180,7 @@ class PPO(Agent):
 
         return new_params, new_opt_state, info
 
-    def train_step(self, train_state: TrainState) -> Tuple[TrainState, Metrics]:
+    def train_step(self, train_state: AnakinTrainState) -> Tuple[AnakinTrainState, Metrics]:
         next_train_state_key, rollout_key, initial_update_key = jax.random.split(train_state.key, 3)
 
         rollout_data, _, new_time_step, new_env_state = self._rollout_fn(

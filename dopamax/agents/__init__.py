@@ -1,3 +1,3 @@
-from .alphazero import AlphaZero
-from .dqn import DQN
-from .ppo import PPO
+from .anakin.alphazero import AlphaZero
+from .anakin.dqn import DQN
+from .anakin.ppo import PPO

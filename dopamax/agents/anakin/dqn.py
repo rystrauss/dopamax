@@ -13,7 +13,7 @@ from chex import PRNGKey, ArrayTree
 from dm_env import StepType
 from ml_collections import ConfigDict
 
-from dopamax.agents.agent import Agent, TrainState, TrainStateWithReplayBuffer
+from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainStateWithReplayBuffer, AnakinTrainState
 from dopamax.agents.utils import register
 from dopamax.environments.environment import Environment
 from dopamax.networks import get_network_build_fn, get_discrete_q_network_model_fn
@@ -57,7 +57,7 @@ _DEFAULT_DQN_CONFIG = ConfigDict(
 
 
 @register("DQN")
-class DQN(Agent):
+class DQN(AnakinAgent):
     """Deep Q-Network (DQN) agent.
 
     This is a simple DQN implementation that is very close to the original paper. It doesn't have a lot of the more
@@ -130,7 +130,9 @@ class DQN(Agent):
         pi = distrax.Categorical(logits=preferences)
         return pi.mode() if deterministic else pi.sample(seed=key)
 
-    def _initial_train_state_without_replay_buffer(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> TrainState:
+    def _initial_train_state_without_replay_buffer(
+        self, consistent_key: PRNGKey, divergent_key: PRNGKey
+    ) -> AnakinTrainState:
         train_state_key, env_key = jax.random.split(divergent_key)
         sample_obs = jnp.expand_dims(self.env.observation_space.sample(consistent_key), 0)
         params = self._model.init(consistent_key, sample_obs)
@@ -138,13 +140,13 @@ class DQN(Agent):
         time_step, env_state = self.env.reset(env_key)
         opt_state = self._optimizer.init(params["online"])
 
-        return TrainState.initial(train_state_key, params, opt_state, time_step, env_state)
+        return AnakinTrainState.initial(train_state_key, params, opt_state, time_step, env_state)
 
-    def initial_train_state(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> TrainStateWithReplayBuffer:
+    def initial_train_state(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> AnakinTrainStateWithReplayBuffer:
         train_state_without_replay_buffer = self._initial_train_state_without_replay_buffer(
             consistent_key, divergent_key
         )
-        return TrainStateWithReplayBuffer(
+        return AnakinTrainStateWithReplayBuffer(
             **dict(train_state_without_replay_buffer), buffer_state=self._buffer.init(consistent_key)
         )
 
@@ -195,7 +197,9 @@ class DQN(Agent):
 
         return new_params, new_opt_state, info
 
-    def train_step(self, train_state: TrainStateWithReplayBuffer) -> Tuple[TrainStateWithReplayBuffer, Metrics]:
+    def train_step(
+        self, train_state: AnakinTrainStateWithReplayBuffer
+    ) -> Tuple[AnakinTrainStateWithReplayBuffer, Metrics]:
         next_train_state_key, rollout_key, update_key = jax.random.split(train_state.key, 3)
 
         current_epsilon = self._epsilon_schedule(train_state.train_step)

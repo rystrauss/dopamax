@@ -23,8 +23,8 @@ Anakin Podracer architecture -- see [this paper][2] for more details.
 
 ## Supported Algorithms
 
-- [Proximal Policy Optimization (PPO)](dopamax/agents/ppo.py)
-- [Deep Q-Network (DQN)](dopamax/agents/dqn.py)
+- [Proximal Policy Optimization (PPO)](dopamax/agents/anakin/ppo.py)
+- [Deep Q-Network (DQN)](dopamax/agents/anakin/dqn.py)
 
 ## Installation
 

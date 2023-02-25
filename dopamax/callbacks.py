@@ -4,7 +4,7 @@ from copy import copy
 import jax
 from wandb.sdk.wandb_run import Run
 
-from dopamax.agents.agent import TrainState
+from dopamax.agents.base import TrainState
 from dopamax.typing import Metrics
 
 

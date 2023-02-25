@@ -1,6 +1,6 @@
+import typing
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-import typing
 
 import jax
 import jax.numpy as jnp

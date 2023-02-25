@@ -46,7 +46,6 @@ _DEFAULT_ALPHAZERO_CONFIG = ConfigDict(
     }
 )
 
-
 @register("AlphaZero")
 class AlphaZero(Agent):
     def __init__(self, env: Environment, config: ConfigDict):
@@ -90,6 +89,8 @@ class AlphaZero(Agent):
             )
 
             return recurrent_fn_output, next_env_state
+
+        self._recurrent_fn = recurrent_fn
 
         def policy_fn(
             params: hk.Params, key: PRNGKey, observation: Observation, env_state: EnvState
@@ -164,9 +165,38 @@ class AlphaZero(Agent):
         return config
 
     def compute_action(
-        self, params: hk.Params, key: PRNGKey, observation: Observation, deterministic: bool = True
+        self, params: hk.Params, key: PRNGKey, observation: Observation, env_state: EnvState, deterministic: bool = True
     ) -> Action:
-        pass
+        model_key, search_key = jax.random.split(key)
+        observation = jax.tree_map(lambda x: jnp.expand_dims(x, axis=0), observation)
+        env_state = jax.tree_map(lambda x: jnp.expand_dims(x, axis=0), env_state)
+
+        pi, value = self._model.apply(params, model_key, observation["observation"])
+
+        root = mctx.RootFnOutput(prior_logits=pi.logits, value=value, embedding=env_state)
+
+        invalid_actions = (
+            observation["invalid_actions"]
+            if isinstance(observation, dict) and "invalid_actions" in observation
+            else None
+        )
+
+        policy_output = mctx.muzero_policy(
+            params=params,
+            rng_key=search_key,
+            root=root,
+            recurrent_fn=self._recurrent_fn,
+            num_simulations=self.config.num_simulations,
+            invalid_actions=invalid_actions,
+            max_depth=self.config.max_depth,
+            dirichlet_fraction=self.config.root_exploration_fraction,
+            dirichlet_alpha=self.config.root_dirichlet_alpha,
+            pb_c_base=self.config.pb_c_base,
+            pb_c_init=self.config.pb_c_init,
+        )
+
+        policy_output, value = jax.tree_map(lambda x: jnp.squeeze(x, axis=0), (policy_output, value))
+        return policy_output.action
 
     def _initial_train_state_without_replay_buffer(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> TrainState:
         train_state_key, env_key = jax.random.split(divergent_key)

@@ -62,6 +62,56 @@ def get_mlp_build_fn(hidden_units: Sequence[int] = (64, 64), activation: str = "
     )
 
 
+class CNN(hk.Module):
+    """A basic convolutional neural network module."""
+
+    def __init__(
+        self,
+        conv_layers: Sequence[Tuple[int, int, int]],
+        activation: Callable[[jnp.ndarray], jnp.ndarray],
+        activate_final: bool = True,
+    ):
+        super().__init__()
+        self._conv_layers = conv_layers
+        self._activation = activation
+        self._activate_final = activate_final
+
+    def __call__(self, x: Array) -> Array:
+        for i, (channels, kernel, stride) in enumerate(self._conv_layers):
+            x = hk.Conv2D(channels, kernel, stride, padding="SAME")(x)
+            if i < len(self._conv_layers) - 1 or self._activate_final:
+                x = self._activation(x)
+
+        return x
+
+
+@register("cnn")
+def get_cnn_build_fn(
+    conv_layers: Sequence[Tuple[int, int, int]] = (), hidden_units: Sequence[int] = (64, 64), activation: str = "relu"
+) -> NetworkBuildFn:
+    """Gets a network build function for a CNN.
+
+    Args:
+        hidden_units: A sequence of integers representing the number of hidden units in each layer.
+        activation: The activation function to use in each layer. Must exist in `jax.nn`.
+
+    Returns:
+        A network build function for the specified MLP.
+    """
+    return lambda: hk.Sequential(
+        [
+            CNN(conv_layers, activation=getattr(jax.nn, activation), activate_final=True),
+            hk.Flatten(),
+            hk.nets.MLP(
+                hidden_units,
+                activation=getattr(jax.nn, activation),
+                activate_final=True,
+                w_init=hk.initializers.Orthogonal(jnp.sqrt(2.0)),
+            ),
+        ],
+    )
+
+
 def get_actor_critic_model_fn(
     action_space: Space,
     network_build_fn: NetworkBuildFn,

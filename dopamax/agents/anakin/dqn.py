@@ -115,7 +115,6 @@ class DQN(AnakinAgent):
     def default_config() -> ConfigDict:
         config = super(DQN, DQN).default_config()
         config.update(_DEFAULT_DQN_CONFIG)
-        config.lock()
         return config
 
     def compute_action(

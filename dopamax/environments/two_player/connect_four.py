@@ -80,7 +80,7 @@ class ConnectFour(TwoPlayerZeroSumEnvironment):
         return Discrete(self._num_cols)
 
     def reset(self, key: PRNGKey) -> Tuple[TimeStep, ConnectFourEnvState]:
-        board = jnp.zeros((self._num_rows, self._num_cols), dtype=jnp.int32)
+        board = jnp.zeros((self._num_rows, self._num_cols), dtype=jnp.float32)
         column_counts = jnp.zeros((self._num_cols,), dtype=jnp.int32)
 
         state = ConnectFourEnvState(

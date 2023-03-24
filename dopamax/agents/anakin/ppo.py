@@ -112,7 +112,6 @@ class PPO(AnakinAgent):
     def default_config() -> ConfigDict:
         config = super(PPO, PPO).default_config()
         config.update(_DEFAULT_PPO_CONFIG)
-        config.lock()
         return config
 
     def compute_action(

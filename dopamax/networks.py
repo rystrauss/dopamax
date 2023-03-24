@@ -63,13 +63,19 @@ def get_mlp_build_fn(hidden_units: Sequence[int] = (64, 64), activation: str = "
 
 
 class CNN(hk.Module):
-    """A basic convolutional neural network module."""
+    """A basic convolutional neural network module.
+
+    Args:
+        conv_layers: A sequence of tuples representing the number of channels, kernel size, and stride for each layer.
+        activation: The activation function to use in each layer. Must exist in `jax.nn`.
+        activate_final: Whether to apply the activation function to the final outputs.
+    """
 
     def __init__(
         self,
         conv_layers: Sequence[Tuple[int, int, int]],
         activation: Callable[[jnp.ndarray], jnp.ndarray],
-        activate_final: bool = True,
+        activate_final: bool = False,
     ):
         super().__init__()
         self._conv_layers = conv_layers
@@ -85,14 +91,23 @@ class CNN(hk.Module):
         return x
 
 
+NATURE_CNN_CONV_LAYERS = ((32, 8, 4), (64, 4, 2), (64, 3, 1))
+
+
 @register("cnn")
 def get_cnn_build_fn(
-    conv_layers: Sequence[Tuple[int, int, int]] = (), hidden_units: Sequence[int] = (64, 64), activation: str = "relu"
+    conv_layers: Sequence[Tuple[int, int, int]] = NATURE_CNN_CONV_LAYERS,
+    hidden_units: Sequence[int] = (512,),
+    activation: str = "relu",
 ) -> NetworkBuildFn:
     """Gets a network build function for a CNN.
 
+    Default values for keyword arguments are for the CNN used in the DQN Nature paper.
+
     Args:
-        hidden_units: A sequence of integers representing the number of hidden units in each layer.
+        conv_layers: A sequence of tuples representing the number of channels, kernel size, and stride for each layer.
+        hidden_units: A sequence of integers representing the number of hidden units in each fully-connected layer
+            after the convolutions.
         activation: The activation function to use in each layer. Must exist in `jax.nn`.
 
     Returns:

@@ -105,8 +105,8 @@ class Box(Space):
 
     def __init__(
         self,
-        low: Array | Scalar,
-        high: Array | Scalar,
+        low: typing.Union[Array, Scalar],
+        high: typing.Union[Array, Scalar],
         shape: typing.Optional[typing.Tuple[int, ...]] = None,
         dtype: jnp.dtype = jnp.float32,
     ):
@@ -127,11 +127,11 @@ class Box(Space):
         self._high = high.astype(dtype)
 
     @property
-    def low(self) -> Array | Scalar:
+    def low(self) -> typing.Union[Array, Scalar]:
         return self._low
 
     @property
-    def high(self) -> Array | Scalar:
+    def high(self) -> typing.Union[Array, Scalar]:
         return self._high
 
     @property

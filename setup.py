@@ -22,6 +22,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/rystrauss/dopamax",
     classifiers=[
+        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
@@ -30,7 +31,7 @@ setup(
     packages=setuptools.find_packages(),
     include_package_data=True,
     platforms="any",
-    python_requires=">=3.10",
+    python_requires=">=3.9",
     entry_points={
         "console_scripts": [
             "dopamax=dopamax._scripts.cli:cli",

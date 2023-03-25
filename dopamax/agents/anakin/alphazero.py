@@ -31,7 +31,10 @@ _DEFAULT_ALPHAZERO_CONFIG = ConfigDict(
         "pb_c_init": 1.25,
         "weight_decay": 1e-4,
         "momentum": 0.9,
-        "learning_rate": 2e-3,
+        "lr_init": 2e-3,
+        "lr_decay_rate": 1.0,
+        "lr_decay_steps": 10000,
+        "value_loss_coefficient": 1.0,
         # The type of network to use.
         "network": "mlp",
         # The configuration dictionary for the network.
@@ -138,10 +141,17 @@ class AlphaZero(AnakinAgent):
         self._rollout_fn = partial(
             rollout_truncated, env, self.config.rollout_fragment_length, policy_fn, pass_env_state_to_policy=True
         )
+
+        lr_schedule = optax.exponential_decay(
+            init_value=self.config.lr_init,
+            transition_steps=self.config.lr_decay_steps,
+            decay_rate=self.config.lr_decay_rate,
+        )
         self._optimizer = optax.chain(
             optax.trace(decay=self.config.momentum),
             optax.add_decayed_weights(self.config.weight_decay),
-            optax.scale(-self.config.learning_rate),
+            optax.scale_by_schedule(lr_schedule),
+            optax.scale(-1.0),
         )
 
         temp_key = jax.random.PRNGKey(0)
@@ -223,7 +233,7 @@ class AlphaZero(AnakinAgent):
         value_loss = jnp.mean((value - search_target_value) ** 2)
         policy_loss = jnp.mean(optax.softmax_cross_entropy(pi.logits, search_action_weights))
 
-        loss = value_loss + policy_loss
+        loss = self.config.value_loss_coefficient * value_loss + policy_loss
 
         metrics = {
             "loss": loss,

@@ -1,4 +1,4 @@
-from typing import Sequence, Optional, Callable, Tuple
+from typing import Sequence, Optional, Callable, Tuple, Union
 
 import distrax
 import haiku as hk
@@ -133,7 +133,7 @@ def get_actor_critic_model_fn(
     value_network: Optional[str] = None,
     free_log_std: bool = False,
     tanh_value: bool = False,
-) -> Callable[[Observation], distrax.Distribution | Tuple[distrax.Distribution, Array]]:
+) -> Callable[[Observation], Union[distrax.Distribution, Tuple[distrax.Distribution, Array]]]:
     """Gets a model function for a generic actor-critic agent.
 
     Here, a model refers to a function that takes observations as input and returns a policy distribution and a value
@@ -154,7 +154,7 @@ def get_actor_critic_model_fn(
         A model function for the specified actor-critic agent.
     """
 
-    def model_fn(observations: Observation) -> distrax.Distribution | Tuple[distrax.Distribution, Array]:
+    def model_fn(observations: Observation) -> Union[distrax.Distribution, Tuple[distrax.Distribution, Array]]:
         policy_net = network_build_fn()
 
         policy_net_output = policy_net(observations)

@@ -166,8 +166,9 @@ def get_actor_critic_model_fn(
         elif isinstance(action_space, Box):
             if free_log_std:
                 num_policy_outputs = action_space.shape[0]
-                log_std = hk.get_parameter("log_std", (num_policy_outputs,), init=hk.initializers.Constant(0.0))
                 loc = hk.Linear(num_policy_outputs, w_init=hk.initializers.Orthogonal(0.01))(policy_net_output)
+                log_std = hk.get_parameter("log_std", (num_policy_outputs,), init=hk.initializers.Constant(0.0))
+                log_std = jnp.broadcast_to(log_std, loc.shape)
             else:
                 num_policy_outputs = action_space.shape[0] * 2
                 policy_params = hk.Linear(num_policy_outputs, w_init=hk.initializers.Orthogonal(0.01))(

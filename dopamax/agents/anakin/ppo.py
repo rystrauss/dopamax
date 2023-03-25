@@ -19,6 +19,7 @@ from dopamax.environments.environment import Environment
 from dopamax.networks import get_actor_critic_model_fn, get_network_build_fn
 from dopamax.rollouts import rollout_truncated, SampleBatch, create_minibatches
 from dopamax.typing import Metrics, Observation, Action
+from dopamax.utils import expand_apply
 
 _DEFAULT_PPO_CONFIG = ConfigDict(
     {
@@ -87,7 +88,7 @@ class PPO(AnakinAgent):
         def policy_fn(params: hk.Params, key: PRNGKey, observation: Observation) -> Tuple[Action, Dict[str, ArrayTree]]:
             model_key, sample_key = jax.random.split(key)
 
-            pi, values = hk.expand_apply(partial(self._model.apply, params, model_key))(observation)
+            pi, values = expand_apply(partial(self._model.apply, params, model_key))(observation)
 
             action, action_logp = pi.sample_and_log_prob(seed=sample_key)
 
@@ -119,7 +120,7 @@ class PPO(AnakinAgent):
     ) -> Action:
         jax.tree_map(chex.assert_shape, observation, self.env.observation_space.shape)
 
-        pi, _ = hk.expand_apply(partial(self._model.apply, params, key))(observation)
+        pi, _ = expand_apply(partial(self._model.apply, params, key))(observation)
 
         if deterministic:
             if isinstance(pi, distrax.Categorical):

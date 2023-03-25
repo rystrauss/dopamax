@@ -20,6 +20,7 @@ from dopamax.networks import get_network_build_fn, get_discrete_q_network_model_
 from dopamax.rollouts import rollout_truncated, SampleBatch
 from dopamax.spaces import Discrete
 from dopamax.typing import Metrics, Observation, Action
+from dopamax.utils import expand_apply
 
 _DEFAULT_DQN_CONFIG = ConfigDict(
     {
@@ -87,7 +88,7 @@ class DQN(AnakinAgent):
         ) -> Tuple[Action, Dict[str, ArrayTree]]:
             model_key, sample_key = jax.random.split(key)
 
-            preferences = hk.expand_apply(partial(self._model.apply, params, model_key))(observation)
+            preferences = expand_apply(partial(self._model.apply, params, model_key))(observation)
             action = distrax.EpsilonGreedy(preferences, epsilon).sample(seed=sample_key)
 
             return action, {}
@@ -125,7 +126,7 @@ class DQN(AnakinAgent):
         deterministic: bool = True,
     ) -> Action:
         jax.tree_map(chex.assert_shape, observation, self.env.observation_space.shape)
-        preferences = hk.expand_apply(partial(self._model.apply, params["online"], key))(observation)
+        preferences = expand_apply(partial(self._model.apply, params["online"], key))(observation)
         pi = distrax.Categorical(logits=preferences)
         return pi.mode() if deterministic else pi.sample(seed=key)
 

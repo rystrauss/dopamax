@@ -26,7 +26,7 @@ class InvertedPendulum(BraxEnvironment):
 
     @property
     def observation_space(self) -> Space:
-        return Box(low=-jnp.inf, high=jnp.inf, shape=(8,))
+        return Box(low=-jnp.inf, high=jnp.inf, shape=(4,))
 
     @property
     def action_space(self) -> Space:

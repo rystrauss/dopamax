@@ -5,7 +5,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from brax import envs as brax_envs
-from brax.io import image
 from chex import dataclass, PRNGKey
 from dm_env import StepType
 
@@ -77,7 +76,3 @@ class BraxEnvironment(Environment, ABC):
         )
 
         return time_step, state
-
-    def render(self, state: BraxEnvState) -> np.ndarray:
-        height, width, _ = self.render_shape
-        return image.render_array(self._brax_env.sys, state.brax_state.qp, width=width, height=height)

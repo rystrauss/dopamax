@@ -41,7 +41,7 @@ setup(
         "jax>=0.4.6",
         "jaxlib>=0.4.6",
         "chex>=0.1.6",
-        "brax>=0.1.1",
+        "brax>=0.9.0",
         "click>=8.1.3",
         "distrax>=0.1.3",
         "dm-env>=1.6",

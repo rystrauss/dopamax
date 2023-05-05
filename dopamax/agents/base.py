@@ -9,6 +9,9 @@ from dopamax.environments.environment import Environment
 from dopamax.spaces import Space
 from dopamax.typing import Observation, Action, Metrics
 
+# The number of most recent episodes to average over when logging performance.
+_EPISODE_BUFFER_SIZE = 100
+
 
 @dataclass(frozen=True)
 class TrainState:

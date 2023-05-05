@@ -1,6 +1,5 @@
 from abc import ABC
-from collections import deque
-from typing import Optional, Sequence, Tuple, Any
+from typing import Optional, Sequence, Dict, Tuple
 
 import haiku as hk
 import jax
@@ -8,14 +7,13 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 from brax.training.replay_buffers import ReplayBufferState
-from chex import PRNGKey, Array, ArrayTree, dataclass
+from chex import PRNGKey, ArrayTree, dataclass, Scalar
 from dm_env import StepType
-from jax.experimental import host_callback
 from ml_collections import ConfigDict
 from tqdm import tqdm
 
-from dopamax.agents.base import Agent, TrainState
-from dopamax.environments.environment import Environment, TimeStep, EnvState
+from dopamax.agents.base import Agent, TrainState, _EPISODE_BUFFER_SIZE
+from dopamax.environments.environment import TimeStep, EnvState
 from dopamax.rollouts import SampleBatch
 
 
@@ -185,46 +183,11 @@ class AnakinAgent(Agent, ABC):
     batch_axis = "batch_axis"
     device_axis = "device_axis"
 
-    def __init__(self, env: Environment, config: ConfigDict):
-        super().__init__(env, config)
-
-        self._reward_buffer = deque(maxlen=100)
-        self._length_buffer = deque(maxlen=100)
-
     @staticmethod
     def default_config() -> ConfigDict:
         config = super(AnakinAgent, AnakinAgent).default_config()
         config.update(_DEFAULT_ANAKIN_CONFIG)
         return config
-
-    def _episode_buffer_update_fn(self, args: Tuple[Array, Array], transforms: Any):
-        """Updates the episode reward and length buffers with new data."""
-        rewards, lengths = args
-
-        rewards = rewards.flatten()
-        lengths = lengths.flatten()
-
-        for reward, length in zip(rewards, lengths):
-            if length != -np.inf:
-                self._reward_buffer.append(reward)
-                self._length_buffer.append(length)
-
-    def _send_episode_updates(self, rollout_data: SampleBatch):
-        """Sends rollout data to the host for updating the episode metrics for logging.
-
-        Args:
-            rollout_data: A batch of rollout data.
-
-        Returns:
-            None
-        """
-        rewards = jnp.where(
-            rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_REWARD], -jnp.inf
-        )
-        lengths = jnp.where(
-            rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_LENGTH], -jnp.inf
-        )
-        host_callback.id_tap(self._episode_buffer_update_fn, (rewards, lengths))
 
     def _maybe_all_reduce(self, fn: str, x: ArrayTree) -> ArrayTree:
         """Performs an all-reduce operation if there are multiple devices or batching.
@@ -246,6 +209,33 @@ class AnakinAgent(Agent, ABC):
 
         return x
 
+    def _get_episode_metrics(self, rollout_data: SampleBatch) -> Tuple[Scalar, Dict[str, Scalar]]:
+        incremental_episodes = jnp.sum(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)
+
+        episode_metrics = {
+            "episode_count": incremental_episodes,
+            "sum_episode_reward": jnp.where(
+                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_REWARD], 0
+            ).sum(),
+            "min_episode_reward": jnp.where(
+                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_REWARD], jnp.inf
+            ).min(),
+            "max_episode_reward": jnp.where(
+                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_REWARD], -jnp.inf
+            ).max(),
+            "sum_episode_length": jnp.where(
+                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_LENGTH], 0
+            ).sum(),
+            "min_episode_length": jnp.where(
+                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_LENGTH], jnp.inf
+            ).min(),
+            "max_episode_length": jnp.where(
+                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_LENGTH], -jnp.inf
+            ).max(),
+        }
+
+        return incremental_episodes, episode_metrics
+
     def train(
         self, key: PRNGKey, num_iterations: int, callback_freq: int = 100, callbacks: Optional[Sequence] = None
     ) -> hk.Params:
@@ -254,42 +244,17 @@ class AnakinAgent(Agent, ABC):
         Args:
             key: The PRNGKey to use to seed and randomness involved in training.
             num_iterations: The number of times to call the train_step function.
-            callback_freq: The frequency, in terms of call to `train_step`, at which to execute any callbacks.
+            callback_freq: The frequency, in terms of calls to `train_step`, at which to execute any callbacks.
             callbacks: A list of callbacks.
 
         Returns:
             The final parameters of the agent.
         """
-        self._reward_buffer.clear()
-        self._length_buffer.clear()
+        if num_iterations % callback_freq != 0:
+            raise ValueError("num_iterations must be a multiple of callback_freq.")
 
         pbar = tqdm(total=num_iterations, desc="Training")
         callbacks = callbacks or []
-
-        def pbar_update_fn(args, transforms, device):
-            if device.id == 0:
-                pbar.update(10)
-
-        def callback_fn(args, transforms, device):
-            if device.id != 0:
-                return
-
-            state, metrics = args
-
-            metrics["min_episode_reward"] = min(self._reward_buffer)
-            metrics["max_episode_reward"] = max(self._reward_buffer)
-            metrics["mean_episode_reward"] = (
-                sum(self._reward_buffer) / len(self._reward_buffer) if self._reward_buffer else 0
-            )
-
-            metrics["min_episode_length"] = min(self._length_buffer)
-            metrics["max_episode_length"] = max(self._length_buffer)
-            metrics["mean_episode_length"] = (
-                sum(self._length_buffer) / len(self._length_buffer) if self._length_buffer else 0
-            )
-
-            for callback in callbacks:
-                callback(state, metrics)
 
         train_step_fn = self.train_step
         initial_train_state_fn = self.initial_train_state
@@ -306,36 +271,38 @@ class AnakinAgent(Agent, ABC):
         else:
             init_divergent_key = jnp.squeeze(init_divergent_key, axis=1)
 
-        def loop_fn(i, train_state):
-            new_train_state, metrics = train_step_fn(train_state)
-
-            callback_train_state = new_train_state
-
-            if self.config.num_envs_per_device > 1:
-                metrics = jax.tree_map(lambda x: x[0], metrics)
-                callback_train_state = jax.tree_map(lambda x: x[0], callback_train_state)
-
-            new_train_state = jax.lax.cond(
-                callback_train_state.train_step % callback_freq == 0,
-                lambda _: host_callback.id_tap(
-                    callback_fn, (callback_train_state, metrics), result=new_train_state, tap_with_device=True
-                ),
-                lambda _: new_train_state,
-                operand=None,
-            )
-
-            new_train_state = jax.lax.cond(
-                callback_train_state.train_step % 10 == 0,
-                lambda _: host_callback.id_tap(pbar_update_fn, (), result=new_train_state, tap_with_device=True),
-                lambda _: new_train_state,
-                operand=None,
-            )
-
-            return new_train_state
+        def scan_fn(train_state, _):
+            return train_step_fn(train_state)
 
         @jax.jit
         def train_fn(initial_train_state):
-            return jax.lax.fori_loop(0, num_iterations, loop_fn, initial_train_state)
+            new_train_state, (metrics, episode_metrics) = jax.lax.scan(
+                scan_fn, initial_train_state, None, length=callback_freq
+            )
+
+            if self.config.num_envs_per_device > 1:
+                for k in episode_metrics.keys():
+                    if k.startswith("max_"):
+                        episode_metrics[k] = jnp.max(episode_metrics[k], axis=-1)
+                    elif k.startswith("min_"):
+                        episode_metrics[k] = jnp.min(episode_metrics[k], axis=-1)
+                    else:
+                        episode_metrics[k] = jnp.sum(episode_metrics[k], axis=-1)
+
+            cumulative_episodes = jnp.cumsum(jnp.flip(episode_metrics["episode_count"]))
+            cutoff_mask = jnp.flip(cumulative_episodes <= _EPISODE_BUFFER_SIZE)
+
+            for k in episode_metrics.keys():
+                if k.startswith("max_"):
+                    episode_metrics[k] = jnp.max(jnp.where(cutoff_mask, episode_metrics[k], -jnp.inf))
+                elif k.startswith("min_"):
+                    episode_metrics[k] = jnp.min(jnp.where(cutoff_mask, episode_metrics[k], jnp.inf))
+                else:
+                    episode_metrics[k] = jnp.sum(jnp.where(cutoff_mask, episode_metrics[k], 0))
+
+            metrics = jax.tree_map(jnp.mean, metrics)
+
+            return new_train_state, (metrics, episode_metrics)
 
         if self.config.num_devices > 1:
             train_fn = jax.pmap(train_fn, axis_name=self.device_axis)
@@ -343,17 +310,49 @@ class AnakinAgent(Agent, ABC):
         else:
             init_divergent_key = jnp.squeeze(init_divergent_key, axis=0)
 
-        initial_train_state = initial_train_state_fn(init_consistent_key, init_divergent_key)
-        train_state = train_fn(initial_train_state)
+        train_state = initial_train_state_fn(init_consistent_key, init_divergent_key)
 
-        final_params = jax.device_get(train_state.params)
+        assert (num_iterations // callback_freq) > 0
 
-        if self.config.num_envs_per_device > 1:
-            final_params = jax.tree_map(lambda x: x[0], final_params)
+        for _ in range(num_iterations // callback_freq):
+            train_state, (metrics, episode_metrics) = jax.device_get(train_fn(train_state))
 
-        if self.config.num_devices > 1:
-            final_params = jax.tree_map(lambda x: x[0], final_params)
+            callback_train_state = train_state
+            if self.config.num_envs_per_device > 1:
+                callback_train_state = jax.tree_map(lambda x: x[0], callback_train_state)
+
+            if self.config.num_devices > 1:
+                callback_train_state = jax.tree_map(lambda x: x[0], callback_train_state)
+                metrics = jax.tree_map(lambda x: x[0], metrics)
+
+                cumulative_episodes = np.cumsum(np.flip(episode_metrics["episode_count"]))
+                cutoff_mask = np.flip(cumulative_episodes <= _EPISODE_BUFFER_SIZE)
+
+                for k in episode_metrics.keys():
+                    if k.startswith("max_"):
+                        episode_metrics[k] = np.max(np.where(cutoff_mask, episode_metrics[k], -np.inf))
+                    elif k.startswith("min_"):
+                        episode_metrics[k] = np.min(np.where(cutoff_mask, episode_metrics[k], np.inf))
+                    else:
+                        episode_metrics[k] = np.sum(np.where(cutoff_mask, episode_metrics[k], 0))
+
+            episode_metrics["mean_episode_reward"] = (
+                episode_metrics["sum_episode_reward"] / episode_metrics["episode_count"]
+            )
+            episode_metrics["mean_episode_length"] = (
+                episode_metrics["sum_episode_length"] / episode_metrics["episode_count"]
+            )
+            del episode_metrics["sum_episode_reward"]
+            del episode_metrics["sum_episode_length"]
+            del episode_metrics["episode_count"]
+
+            metrics = {**metrics, **episode_metrics}
+
+            for callback in callbacks:
+                callback(callback_train_state, metrics)
+
+            pbar.update(callback_freq)
 
         pbar.close()
 
-        return final_params
+        return callback_train_state.params

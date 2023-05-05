@@ -9,7 +9,6 @@ import jax.numpy as jnp
 import optax
 import rlax
 from chex import PRNGKey, ArrayTree
-from dm_env import StepType
 from ml_collections import ConfigDict
 
 from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainState
@@ -190,8 +189,6 @@ class PPO(AnakinAgent):
             train_state.env_state,
         )
 
-        self._send_episode_updates(rollout_data)
-
         _, final_value = self._model.apply(
             train_state.params,
             rollout_key,
@@ -248,14 +245,12 @@ class PPO(AnakinAgent):
         )
 
         metrics = jax.tree_map(jnp.mean, metrics)
-        metrics = self._maybe_all_reduce("pmean", metrics)
 
+        incremental_episodes, episode_metrics = self._get_episode_metrics(rollout_data)
+        incremental_episodes = self._maybe_all_reduce("psum", incremental_episodes)
         incremental_timesteps = (
             self.config.rollout_fragment_length * self.config.num_envs_per_device * self.config.num_devices
         )
-
-        incremental_episodes = jnp.sum(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)
-        incremental_episodes = self._maybe_all_reduce("psum", incremental_episodes)
 
         next_train_state = train_state.update(
             new_key=next_train_state_key,
@@ -267,4 +262,4 @@ class PPO(AnakinAgent):
             new_env_state=new_env_state,
         )
 
-        return next_train_state, metrics
+        return next_train_state, (metrics, episode_metrics)

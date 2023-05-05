@@ -10,7 +10,6 @@ import optax
 import rlax
 from brax.training.replay_buffers import UniformSamplingQueue
 from chex import PRNGKey, ArrayTree
-from dm_env import StepType
 from ml_collections import ConfigDict
 
 from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainStateWithReplayBuffer, AnakinTrainState
@@ -212,8 +211,6 @@ class DQN(AnakinAgent):
             epsilon=current_epsilon,
         )
 
-        self._send_episode_updates(rollout_data)
-
         new_buffer_state = self._buffer.insert(train_state.buffer_state, rollout_data)
         new_buffer_state, sample = self._buffer.sample(new_buffer_state)
 
@@ -232,11 +229,10 @@ class DQN(AnakinAgent):
         )
 
         metrics = jax.tree_map(jnp.mean, metrics)
-        metrics = self._maybe_all_reduce("pmean", metrics)
 
-        incremental_timesteps = self.config.num_envs_per_device * self.config.num_devices
-        incremental_episodes = jnp.sum(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)
+        incremental_episodes, episode_metrics = self._get_episode_metrics(rollout_data)
         incremental_episodes = self._maybe_all_reduce("psum", incremental_episodes)
+        incremental_timesteps = self.config.num_envs_per_device * self.config.num_devices
 
         next_train_state = train_state.update(
             new_key=next_train_state_key,
@@ -266,4 +262,4 @@ class DQN(AnakinAgent):
             warmup_train_state,
         )
 
-        return next_train_state, metrics
+        return next_train_state, (metrics, episode_metrics)

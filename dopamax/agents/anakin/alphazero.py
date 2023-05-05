@@ -8,7 +8,6 @@ import mctx
 import optax
 from brax.training.replay_buffers import UniformSamplingQueue
 from chex import PRNGKey, Array, ArrayTree
-from dm_env import StepType
 from mctx._src.base import RecurrentState, RecurrentFnOutput
 from ml_collections import ConfigDict
 
@@ -265,8 +264,6 @@ class AlphaZero(AnakinAgent):
             train_state.env_state,
         )
 
-        self._send_episode_updates(rollout_data)
-
         new_buffer_state = self._buffer.insert(train_state.buffer_state, rollout_data)
 
         def update_scan_fn(carry, _):
@@ -295,14 +292,12 @@ class AlphaZero(AnakinAgent):
         )
 
         metrics = jax.tree_map(jnp.mean, metrics)
-        metrics = self._maybe_all_reduce("pmean", metrics)
 
+        incremental_episodes, episode_metrics = self._get_episode_metrics(rollout_data)
+        incremental_episodes = self._maybe_all_reduce("psum", incremental_episodes)
         incremental_timesteps = (
             self.config.rollout_fragment_length * self.config.num_envs_per_device * self.config.num_devices
         )
-
-        incremental_episodes = jnp.sum(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)
-        incremental_episodes = self._maybe_all_reduce("psum", incremental_episodes)
 
         next_train_state = train_state.update(
             new_key=next_train_state_key,
@@ -315,4 +310,4 @@ class AlphaZero(AnakinAgent):
             new_buffer_state=new_buffer_state,
         )
 
-        return next_train_state, metrics
+        return next_train_state, (metrics, episode_metrics)

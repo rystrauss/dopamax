@@ -21,6 +21,8 @@ because the entire loop of environment simulation, agent interaction, and policy
 XLA program and executed on CPUs, GPUs, or TPUs. More specifically, rhe implementations in Dopamax follow the
 Anakin Podracer architecture -- see [this paper][2] for more details.
 
+**Note that this repository is not actively maintained and is subject to breaking changes at any time.**
+
 ## Supported Algorithms
 
 - [Proximal Policy Optimization (PPO)](dopamax/agents/anakin/ppo.py)

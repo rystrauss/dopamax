@@ -14,7 +14,7 @@ with open(os.path.join(CURRENT_DIR, "README.md"), encoding="utf-8") as f:
 
 setup(
     name="dopamax",
-    version="0.1.0",
+    version="0.1.1",
     author="Ryan Strauss",
     author_email="ryanrstrauss@icloud.com",
     description="Reinforcement learning in pure JAX.",
@@ -38,8 +38,8 @@ setup(
         ],
     },
     install_requires=[
-        "jax>=0.4.6",
-        "jaxlib>=0.4.6",
+        "jax>=0.4.23",
+        "jaxlib>=0.4.23",
         "chex>=0.1.6",
         "brax>=0.9.0",
         "click>=8.1.3",
@@ -49,9 +49,10 @@ setup(
         "einops>=0.6.0",
         "ffmpeg>=1.4",
         "imageio>=2.25.1",
-        "mctx==0.0.2",
+        "mctx>=0.0.5",
         "moviepy>=1.0.3",
         "ml-collections>=0.1.1",
+        "optax>=0.1.7",
         "pygame>=2.1.3",
         "numpy>=1.22.4",
         "rlax>=0.1.5",
@@ -60,6 +61,6 @@ setup(
     ],
     tests_require=[
         "pytest",
-        "gymnasium==0.27.0",
+        "gymnasium==0.29.1",
     ],
 )

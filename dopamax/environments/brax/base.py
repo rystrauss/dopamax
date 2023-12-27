@@ -3,7 +3,6 @@ from typing import Tuple, Optional
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 from brax import envs as brax_envs
 from chex import dataclass, PRNGKey
 from dm_env import StepType

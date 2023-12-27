@@ -1,13 +1,14 @@
 from abc import ABC
-from typing import Optional, Sequence, Dict, Tuple
+from typing import Optional, Sequence, Callable
 
+import einops
 import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from brax.training.replay_buffers import ReplayBufferState
-from chex import PRNGKey, ArrayTree, dataclass, Scalar
+from brax.training.replay_buffers import ReplayBufferState, Queue
+from chex import PRNGKey, ArrayTree, dataclass
 from dm_env import StepType
 from ml_collections import ConfigDict
 from tqdm import tqdm
@@ -25,10 +26,23 @@ class AnakinTrainState(TrainState):
     train_step: int
     total_timesteps: int
     total_episodes: int
+    episode_buffer_state: ReplayBufferState
     params: hk.Params
     opt_state: optax.OptState
     time_step: TimeStep
     env_state: EnvState
+
+    @staticmethod
+    def episode_buffer() -> Queue:
+        return Queue(
+            max_replay_size=_EPISODE_BUFFER_SIZE,
+            dummy_data_sample={
+                SampleBatch.EPISODE_LENGTH: 0,
+                SampleBatch.EPISODE_REWARD: 0.0,
+            },
+            sample_batch_size=_EPISODE_BUFFER_SIZE,
+            cyclic=True,
+        )
 
     @classmethod
     def initial(
@@ -46,11 +60,22 @@ class AnakinTrainState(TrainState):
         Returns:
             The initial training state.
         """
+        q = AnakinTrainState.episode_buffer()
+        episode_buffer_state = q.init(key)
+        episode_buffer_state = q.insert(
+            episode_buffer_state,
+            {
+                SampleBatch.EPISODE_LENGTH: -jnp.ones((_EPISODE_BUFFER_SIZE,), jnp.int32),
+                SampleBatch.EPISODE_REWARD: -jnp.ones((_EPISODE_BUFFER_SIZE,), jnp.float32),
+            },
+        )
+
         return cls(
             key=key,
             train_step=0,
             total_timesteps=0,
             total_episodes=0,
+            episode_buffer_state=episode_buffer_state,
             params=params,
             opt_state=opt_state,
             time_step=time_step,
@@ -60,32 +85,60 @@ class AnakinTrainState(TrainState):
     def update(
         self,
         new_key: PRNGKey,
-        incremental_timesteps: int,
-        incremental_episodes: int,
+        rollout_data: SampleBatch,
         new_params: hk.Params,
         new_opt_state: optax.OptState,
         new_time_step: TimeStep,
         new_env_state: EnvState,
+        maybe_all_reduce_fn: Callable[[str, ArrayTree], ArrayTree],
     ) -> "AnakinTrainState":
         """Updates a training state after the completion of a new training iteration.
 
         Args:
             new_key: A new PRNGKey.
-            incremental_timesteps: The number of timesteps collected in the new training iteration.
-            incremental_episodes: The number of episodes completed in the new training iteration.
+            rollout_data: The rollout data generated in the last training iteration.
             new_params: The new parameters of the agent.
             new_opt_state: The new optimizer state.
             new_time_step: The new environment time step.
             new_env_state: The new environment state.
+            maybe_all_reduce_fn: A function to use for all-reducing relevant metrics.
 
         Returns:
             The updated training state.
         """
+        incremental_episodes = jnp.sum(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)
+        incremental_timesteps = rollout_data[SampleBatch.STEP_TYPE].shape[0]
+
+        incremental_episodes = maybe_all_reduce_fn("psum", incremental_episodes)
+        incremental_timesteps = maybe_all_reduce_fn("psum", incremental_timesteps)
+
+        q = AnakinTrainState.episode_buffer()
+
+        def scan_fn(state, sample):
+            state = jax.lax.cond(
+                sample[SampleBatch.STEP_TYPE] == StepType.LAST,
+                lambda: q.insert(
+                    state,
+                    jax.tree_map(
+                        lambda t: jnp.expand_dims(t, -1),
+                        {
+                            SampleBatch.EPISODE_LENGTH: sample[SampleBatch.EPISODE_LENGTH],
+                            SampleBatch.EPISODE_REWARD: sample[SampleBatch.EPISODE_REWARD],
+                        },
+                    ),
+                ),
+                lambda: state,
+            )
+            return state, None
+
+        new_episode_buffer_state, _ = jax.lax.scan(scan_fn, self.episode_buffer_state, rollout_data)
+
         return AnakinTrainState(
             key=new_key,
             train_step=self.train_step + 1,
             total_timesteps=self.total_timesteps + incremental_timesteps,
             total_episodes=self.total_episodes + incremental_episodes,
+            episode_buffer_state=new_episode_buffer_state,
             params=new_params,
             opt_state=new_opt_state,
             time_step=new_time_step,
@@ -120,11 +173,22 @@ class AnakinTrainStateWithReplayBuffer(AnakinTrainState):
         Returns:
             The initial training state.
         """
+        q = AnakinTrainState.episode_buffer()
+        episode_buffer_state = q.init(key)
+        episode_buffer_state = q.insert(
+            episode_buffer_state,
+            {
+                SampleBatch.EPISODE_LENGTH: -jnp.ones((_EPISODE_BUFFER_SIZE,), jnp.int32),
+                SampleBatch.EPISODE_REWARD: -jnp.ones((_EPISODE_BUFFER_SIZE,), jnp.float32),
+            },
+        )
+
         return cls(
             key=key,
             train_step=0,
             total_timesteps=0,
             total_episodes=0,
+            episode_buffer_state=episode_buffer_state,
             params=params,
             opt_state=opt_state,
             time_step=time_step,
@@ -135,34 +199,62 @@ class AnakinTrainStateWithReplayBuffer(AnakinTrainState):
     def update(
         self,
         new_key: PRNGKey,
-        incremental_timesteps: int,
-        incremental_episodes: int,
+        rollout_data: SampleBatch,
         new_params: hk.Params,
         new_opt_state: optax.OptState,
         new_time_step: TimeStep,
         new_env_state: EnvState,
         new_buffer_state: ReplayBufferState,
+        maybe_all_reduce_fn: Callable[[str, ArrayTree], ArrayTree],
     ) -> "AnakinTrainStateWithReplayBuffer":
         """Updates a training state after the completion of a new training iteration.
 
         Args:
             new_key: A new PRNGKey.
-            incremental_timesteps: The number of timesteps collected in the new training iteration.
-            incremental_episodes: The number of episodes completed in the new training iteration.
+            rollout_data: The rollout data generated in the last training iteration.
             new_params: The new parameters of the agent.
             new_opt_state: The new optimizer state.
             new_time_step: The new environment time step.
             new_env_state: The new environment state.
             new_buffer_state: The new replay buffer state.
+            maybe_all_reduce_fn: A function to use for all-reducing relevant metrics.
 
         Returns:
             The updated training state.
         """
+        incremental_episodes = jnp.sum(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)
+        incremental_timesteps = rollout_data[SampleBatch.STEP_TYPE].shape[0]
+
+        incremental_episodes = maybe_all_reduce_fn("psum", incremental_episodes)
+        incremental_timesteps = maybe_all_reduce_fn("psum", incremental_timesteps)
+
+        q = AnakinTrainState.episode_buffer()
+
+        def scan_fn(state, sample):
+            state = jax.lax.cond(
+                sample[SampleBatch.STEP_TYPE] == StepType.LAST,
+                lambda: q.insert(
+                    state,
+                    jax.tree_map(
+                        lambda t: jnp.expand_dims(t, -1),
+                        {
+                            SampleBatch.EPISODE_LENGTH: sample[SampleBatch.EPISODE_LENGTH],
+                            SampleBatch.EPISODE_REWARD: sample[SampleBatch.EPISODE_REWARD],
+                        },
+                    ),
+                ),
+                lambda: state,
+            )
+            return state, None
+
+        new_episode_buffer_state, _ = jax.lax.scan(scan_fn, self.episode_buffer_state, rollout_data)
+
         return AnakinTrainStateWithReplayBuffer(
             key=new_key,
             train_step=self.train_step + 1,
             total_timesteps=self.total_timesteps + incremental_timesteps,
             total_episodes=self.total_episodes + incremental_episodes,
+            episode_buffer_state=new_episode_buffer_state,
             params=new_params,
             opt_state=new_opt_state,
             time_step=new_time_step,
@@ -209,33 +301,6 @@ class AnakinAgent(Agent, ABC):
 
         return x
 
-    def _get_episode_metrics(self, rollout_data: SampleBatch) -> Tuple[Scalar, Dict[str, Scalar]]:
-        incremental_episodes = jnp.sum(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)
-
-        episode_metrics = {
-            "episode_count": incremental_episodes,
-            "sum_episode_reward": jnp.where(
-                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_REWARD], 0
-            ).sum(),
-            "min_episode_reward": jnp.where(
-                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_REWARD], jnp.inf
-            ).min(),
-            "max_episode_reward": jnp.where(
-                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_REWARD], -jnp.inf
-            ).max(),
-            "sum_episode_length": jnp.where(
-                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_LENGTH], 0
-            ).sum(),
-            "min_episode_length": jnp.where(
-                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_LENGTH], jnp.inf
-            ).min(),
-            "max_episode_length": jnp.where(
-                rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST, rollout_data[SampleBatch.EPISODE_LENGTH], -jnp.inf
-            ).max(),
-        }
-
-        return incremental_episodes, episode_metrics
-
     def train(
         self, key: PRNGKey, num_iterations: int, callback_freq: int = 100, callbacks: Optional[Sequence] = None
     ) -> hk.Params:
@@ -276,33 +341,11 @@ class AnakinAgent(Agent, ABC):
 
         @jax.jit
         def train_fn(initial_train_state):
-            new_train_state, (metrics, episode_metrics) = jax.lax.scan(
-                scan_fn, initial_train_state, None, length=callback_freq
-            )
-
-            if self.config.num_envs_per_device > 1:
-                for k in episode_metrics.keys():
-                    if k.startswith("max_"):
-                        episode_metrics[k] = jnp.max(episode_metrics[k], axis=-1)
-                    elif k.startswith("min_"):
-                        episode_metrics[k] = jnp.min(episode_metrics[k], axis=-1)
-                    else:
-                        episode_metrics[k] = jnp.sum(episode_metrics[k], axis=-1)
-
-            cumulative_episodes = jnp.cumsum(jnp.flip(episode_metrics["episode_count"]))
-            cutoff_mask = jnp.flip(cumulative_episodes <= _EPISODE_BUFFER_SIZE)
-
-            for k in episode_metrics.keys():
-                if k.startswith("max_"):
-                    episode_metrics[k] = jnp.max(jnp.where(cutoff_mask, episode_metrics[k], -jnp.inf))
-                elif k.startswith("min_"):
-                    episode_metrics[k] = jnp.min(jnp.where(cutoff_mask, episode_metrics[k], jnp.inf))
-                else:
-                    episode_metrics[k] = jnp.sum(jnp.where(cutoff_mask, episode_metrics[k], 0))
+            new_train_state, metrics = jax.lax.scan(scan_fn, initial_train_state, None, length=callback_freq)
 
             metrics = jax.tree_map(jnp.mean, metrics)
 
-            return new_train_state, (metrics, episode_metrics)
+            return new_train_state, metrics
 
         if self.config.num_devices > 1:
             train_fn = jax.pmap(train_fn, axis_name=self.device_axis)
@@ -315,7 +358,7 @@ class AnakinAgent(Agent, ABC):
         assert (num_iterations // callback_freq) > 0
 
         for _ in range(num_iterations // callback_freq):
-            train_state, (metrics, episode_metrics) = jax.device_get(train_fn(train_state))
+            train_state, metrics = jax.device_get(train_fn(train_state))
 
             callback_train_state = train_state
             if self.config.num_envs_per_device > 1:
@@ -325,26 +368,30 @@ class AnakinAgent(Agent, ABC):
                 callback_train_state = jax.tree_map(lambda x: x[0], callback_train_state)
                 metrics = jax.tree_map(lambda x: x[0], metrics)
 
-                cumulative_episodes = np.cumsum(np.flip(episode_metrics["episode_count"]))
-                cutoff_mask = np.flip(cumulative_episodes <= _EPISODE_BUFFER_SIZE)
+            episode_buffer = AnakinTrainState.episode_buffer()
+            sample_fn = episode_buffer.sample_internal
 
-                for k in episode_metrics.keys():
-                    if k.startswith("max_"):
-                        episode_metrics[k] = np.max(np.where(cutoff_mask, episode_metrics[k], -np.inf))
-                    elif k.startswith("min_"):
-                        episode_metrics[k] = np.min(np.where(cutoff_mask, episode_metrics[k], np.inf))
-                    else:
-                        episode_metrics[k] = np.sum(np.where(cutoff_mask, episode_metrics[k], 0))
+            if self.config.num_envs_per_device > 1:
+                sample_fn = jax.vmap(sample_fn)
 
-            episode_metrics["mean_episode_reward"] = (
-                episode_metrics["sum_episode_reward"] / episode_metrics["episode_count"]
+            if self.config.num_devices > 1:
+                sample_fn = jax.vmap(sample_fn)
+
+            _, episodes = sample_fn(train_state.episode_buffer_state)
+            episodes = jax.device_get(episodes)
+            episodes = jax.tree_map(
+                lambda x: einops.rearrange(x, "... t e -> (t ...) e")[:, -_EPISODE_BUFFER_SIZE:], episodes
             )
-            episode_metrics["mean_episode_length"] = (
-                episode_metrics["sum_episode_length"] / episode_metrics["episode_count"]
-            )
-            del episode_metrics["sum_episode_reward"]
-            del episode_metrics["sum_episode_length"]
-            del episode_metrics["episode_count"]
+            episodes = jax.tree_map(lambda x: x[episodes[SampleBatch.EPISODE_LENGTH] != -1], episodes)
+
+            episode_metrics = {
+                "min_episode_reward": np.min(episodes[SampleBatch.EPISODE_REWARD]),
+                "mean_episode_reward": np.mean(episodes[SampleBatch.EPISODE_REWARD]),
+                "max_episode_reward": np.max(episodes[SampleBatch.EPISODE_REWARD]),
+                "min_episode_length": np.min(episodes[SampleBatch.EPISODE_LENGTH]),
+                "mean_episode_length": np.mean(episodes[SampleBatch.EPISODE_LENGTH]),
+                "max_episode_length": np.max(episodes[SampleBatch.EPISODE_LENGTH]),
+            }
 
             metrics = {**metrics, **episode_metrics}
 

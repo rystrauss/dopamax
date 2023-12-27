@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Tuple, Optional, Sequence
 
 import haiku as hk
+from brax.training.replay_buffers import ReplayBufferState
 from chex import dataclass, PRNGKey
 from ml_collections import ConfigDict
 
@@ -10,7 +11,7 @@ from dopamax.spaces import Space
 from dopamax.typing import Observation, Action, Metrics
 
 # The number of most recent episodes to average over when logging performance.
-_EPISODE_BUFFER_SIZE = 100
+_EPISODE_BUFFER_SIZE = 128
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class TrainState:
     train_step: int
     total_timesteps: int
     total_episodes: int
+    episode_buffer_state: ReplayBufferState
 
 
 class Agent(ABC):

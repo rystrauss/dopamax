@@ -230,30 +230,26 @@ class DQN(AnakinAgent):
 
         metrics = jax.tree_map(jnp.mean, metrics)
 
-        incremental_episodes, episode_metrics = self._get_episode_metrics(rollout_data)
-        incremental_episodes = self._maybe_all_reduce("psum", incremental_episodes)
-        incremental_timesteps = self.config.num_envs_per_device * self.config.num_devices
-
         next_train_state = train_state.update(
             new_key=next_train_state_key,
-            incremental_timesteps=incremental_timesteps,
-            incremental_episodes=incremental_episodes,
+            rollout_data=rollout_data,
             new_params=new_params,
             new_opt_state=new_opt_state,
             new_time_step=new_time_step,
             new_env_state=new_env_state,
             new_buffer_state=new_buffer_state,
+            maybe_all_reduce_fn=self._maybe_all_reduce,
         )
 
         warmup_train_state = train_state.update(
             new_key=next_train_state_key,
-            incremental_timesteps=incremental_timesteps,
-            incremental_episodes=incremental_episodes,
+            rollout_data=rollout_data,
             new_params=train_state.params,
             new_opt_state=train_state.opt_state,
             new_time_step=new_time_step,
             new_env_state=new_env_state,
             new_buffer_state=new_buffer_state,
+            maybe_all_reduce_fn=self._maybe_all_reduce,
         )
 
         next_train_state = jax.tree_map(
@@ -262,4 +258,4 @@ class DQN(AnakinAgent):
             warmup_train_state,
         )
 
-        return next_train_state, (metrics, episode_metrics)
+        return next_train_state, metrics

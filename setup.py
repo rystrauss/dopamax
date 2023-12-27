@@ -46,6 +46,7 @@ setup(
         "distrax>=0.1.3",
         "dm-env>=1.6",
         "dm-haiku>=0.0.9",
+        "pgx>=2.0.1",
         "einops>=0.6.0",
         "ffmpeg>=1.4",
         "imageio>=2.25.1",

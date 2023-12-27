@@ -1,0 +1,29 @@
+env_name: "ConnectFour"
+agent_name: "AlphaZero"
+train_iterations: 5000
+callback_freq: 50
+# Comment out the seed if you want each run to be different.
+seed: 138722729
+agent_config:
+  num_devices: 8
+  num_envs_per_device: 1
+  batch_size: 8
+  rollout_fragment_length: 256
+  num_simulations: 50
+  max_depth: 42
+  root_dirichlet_alpha: 0.3
+  root_exploration_fraction: 0.25
+  pb_c_base: 19652
+  pb_c_init: 1.25
+  weight_decay: 0.0001
+  momentum: 0.9
+  lr_init: 0.002
+  lr_decay_steps: 200000
+  value_loss_coefficient: 0.25
+  buffer_size: 10000
+  num_updates: 10
+  network: "cnn"
+  network_config:
+    conv_layers: [ [ 8, 3, 1 ], [ 16, 3, 1 ], [ 16, 3, 1 ] ]
+    hidden_units: [ 32 ]
+  value_network: "copy"

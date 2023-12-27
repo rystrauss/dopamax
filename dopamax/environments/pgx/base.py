@@ -8,7 +8,7 @@ from chex import dataclass, PRNGKey
 from dm_env import StepType
 
 from dopamax.environments.environment import Environment, EnvState, TimeStep
-from dopamax.spaces import Box, Space, Discrete
+from dopamax.spaces import Box, Space, Discrete, Dict
 from dopamax.typing import Action
 
 
@@ -27,10 +27,12 @@ class PGXEnvironment(Environment, ABC):
         pgx_state = self._pgx_env.init(key)
 
         time_step = TimeStep.restart(
-            pgx_state.observation.astype(jnp.float32),
+            {
+                "observation": pgx_state.observation.astype(jnp.float32),
+                "invalid_actions": (~pgx_state.legal_action_mask).astype(jnp.float32),
+            },
             {
                 "current_player": pgx_state.current_player,
-                "legal_action_mask": pgx_state.legal_action_mask,
             },
         )
         env_state = PGXEnvState(
@@ -43,7 +45,12 @@ class PGXEnvironment(Environment, ABC):
 
     @property
     def observation_space(self) -> Space:
-        return Box(low=-jnp.inf, high=jnp.inf, shape=self._pgx_env.observation_shape, dtype=jnp.float32)
+        return Dict(
+            {
+                "observation": Box(low=-jnp.inf, high=jnp.inf, shape=self._pgx_env.observation_shape),
+                "invalid_actions": Box(low=0, high=1, shape=(self._pgx_env.num_actions,)),
+            }
+        )
 
     @property
     def action_space(self) -> Space:
@@ -67,13 +74,15 @@ class PGXEnvironment(Environment, ABC):
         truncate = jnp.squeeze(jnp.bool_(new_pgx_state.truncated))
 
         time_step = TimeStep(
-            observation=new_pgx_state.observation.astype(jnp.float32),
+            observation={
+                "observation": new_pgx_state.observation.astype(jnp.float32),
+                "invalid_actions": (~new_pgx_state.legal_action_mask).astype(jnp.float32),
+            },
             reward=reward,
             discount=1.0 - jnp.float32(done & ~truncate),
             step_type=jax.lax.select(done, StepType.LAST, StepType.MID),
             info={
                 "current_player": new_pgx_state.current_player,
-                "legal_action_mask": new_pgx_state.legal_action_mask,
             },
         )
 

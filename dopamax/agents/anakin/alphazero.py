@@ -14,7 +14,7 @@ from ml_collections import ConfigDict
 from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainState, AnakinTrainStateWithReplayBuffer
 from dopamax.agents.utils import register
 from dopamax.environments.environment import Environment, EnvState
-from dopamax.environments.two_player.base import TwoPlayerZeroSumEnvironment
+from dopamax.environments.pgx.base import PGXEnvironment
 from dopamax.networks import get_network_build_fn, get_actor_critic_model_fn
 from dopamax.rollouts import SampleBatch, rollout_truncated
 from dopamax.typing import Metrics, Observation, Action
@@ -54,7 +54,7 @@ class AlphaZero(AnakinAgent):
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
 
-        assert isinstance(env, TwoPlayerZeroSumEnvironment), "AlphaZero only supports `TwoPlayerZeroSumEnvironment`s."
+        assert isinstance(env, PGXEnvironment), "AlphaZero only supports `PGXEnvironment`s."
 
         network_build_fn = get_network_build_fn(self.config.network, **self.config.network_config)
         model_fn = get_actor_critic_model_fn(
@@ -80,13 +80,17 @@ class AlphaZero(AnakinAgent):
             )
 
             pi, value = self._model.apply(params, model_key, next_time_step.observation["observation"])
-            prior_logits = pi.logits - 1e10 * next_time_step.observation["invalid_actions"]
+
+            prior_logits = pi.logits - jnp.max(pi.logits, axis=-1, keepdims=True)
+            prior_logits = jnp.where(
+                next_time_step.observation["invalid_actions"], jnp.finfo(prior_logits.dtype).min, prior_logits
+            )
 
             value = jnp.where(next_time_step.discount == 0.0, 0.0, value)
 
             recurrent_fn_output = mctx.RecurrentFnOutput(
                 reward=next_time_step.reward,
-                discount=next_time_step.discount,
+                discount=-next_time_step.discount,
                 prior_logits=prior_logits,
                 value=value,
             )
@@ -293,21 +297,15 @@ class AlphaZero(AnakinAgent):
 
         metrics = jax.tree_map(jnp.mean, metrics)
 
-        incremental_episodes, episode_metrics = self._get_episode_metrics(rollout_data)
-        incremental_episodes = self._maybe_all_reduce("psum", incremental_episodes)
-        incremental_timesteps = (
-            self.config.rollout_fragment_length * self.config.num_envs_per_device * self.config.num_devices
-        )
-
         next_train_state = train_state.update(
             new_key=next_train_state_key,
-            incremental_timesteps=incremental_timesteps,
-            incremental_episodes=incremental_episodes,
+            rollout_data=rollout_data,
             new_params=new_params,
             new_opt_state=new_opt_state,
             new_time_step=new_time_step,
             new_env_state=new_env_state,
             new_buffer_state=new_buffer_state,
+            maybe_all_reduce_fn=self._maybe_all_reduce,
         )
 
-        return next_train_state, (metrics, episode_metrics)
+        return next_train_state, metrics

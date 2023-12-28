@@ -57,11 +57,11 @@ class PGXEnvironment(Environment, ABC):
         return Discrete(self._pgx_env.num_actions)
 
     def step(self, key: PRNGKey, state: PGXEnvState, action: Action) -> Tuple[TimeStep, PGXEnvState]:
-        prev_terminal = jnp.squeeze(jnp.bool_(state.pgx_state.terminated | state.pgx_state.truncated))
+        prev_terminal = jnp.bool_(state.pgx_state.terminated | state.pgx_state.truncated)
 
         new_pgx_state = self._pgx_env.step(state.pgx_state, action, key)
 
-        reward = jnp.squeeze(new_pgx_state.rewards[new_pgx_state.current_player])
+        reward = new_pgx_state.rewards[state.pgx_state.current_player]
         length = 1 - prev_terminal
 
         state = PGXEnvState(
@@ -70,8 +70,8 @@ class PGXEnvironment(Environment, ABC):
             pgx_state=new_pgx_state,
         )
 
-        done = jnp.squeeze(jnp.bool_(new_pgx_state.terminated | new_pgx_state.truncated))
-        truncate = jnp.squeeze(jnp.bool_(new_pgx_state.truncated))
+        done = jnp.bool_(new_pgx_state.terminated | new_pgx_state.truncated)
+        truncate = jnp.bool_(new_pgx_state.truncated)
 
         time_step = TimeStep(
             observation={

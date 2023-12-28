@@ -145,7 +145,7 @@ class AlphaZero(AnakinAgent):
             rollout_truncated, env, self.config.rollout_fragment_length, policy_fn, pass_env_state_to_policy=True
         )
 
-        lr_schedule = optax.exponential_decay(
+        self._lr_schedule = optax.exponential_decay(
             init_value=self.config.lr_init,
             transition_steps=self.config.lr_decay_steps,
             decay_rate=self.config.lr_decay_rate,
@@ -153,7 +153,7 @@ class AlphaZero(AnakinAgent):
         self._optimizer = optax.chain(
             optax.trace(decay=self.config.momentum),
             optax.add_decayed_weights(self.config.weight_decay),
-            optax.scale_by_schedule(lr_schedule),
+            optax.scale_by_schedule(self._lr_schedule),
             optax.scale(-1.0),
         )
 
@@ -292,6 +292,9 @@ class AlphaZero(AnakinAgent):
                 batch["search_action_weights"],
                 batch["search_target_value"],
             )
+
+            schedule_count = opt_state[-2].count
+            info["learning_rate"] = self._lr_schedule(schedule_count)
 
             return (new_params, new_opt_state, new_buffer_state, next_key), info
 

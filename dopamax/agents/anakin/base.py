@@ -379,9 +379,12 @@ class AnakinAgent(Agent, ABC):
 
             _, episodes = sample_fn(train_state.episode_buffer_state)
             episodes = jax.device_get(episodes)
-            episodes = jax.tree_map(
-                lambda x: einops.rearrange(x, "... t e -> (t ...) e")[:, -_EPISODE_BUFFER_SIZE:], episodes
-            )
+
+            if self.config.num_envs_per_device > 1 or self.config.num_devices > 1:
+                episodes = jax.tree_map(
+                    lambda x: einops.rearrange(x, "... t e -> (t ...) e")[:, -_EPISODE_BUFFER_SIZE:], episodes
+                )
+
             episodes = jax.tree_map(lambda x: x[episodes[SampleBatch.EPISODE_LENGTH] != -1], episodes)
 
             episode_metrics = {

@@ -5,3 +5,4 @@ wandb
 artifacts
 build
 dopamax.egg-info
+.ipynb_checkpoints

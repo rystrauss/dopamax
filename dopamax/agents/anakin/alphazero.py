@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Optional
 
 import haiku as hk
 import jax
@@ -178,7 +178,13 @@ class AlphaZero(AnakinAgent):
         return config
 
     def compute_action(
-        self, params: hk.Params, key: PRNGKey, observation: Observation, env_state: EnvState, deterministic: bool = True
+        self,
+        params: hk.Params,
+        key: PRNGKey,
+        observation: Observation,
+        env_state: EnvState,
+        deterministic: bool = True,
+        num_simulations: Optional[int] = None,
     ) -> Action:
         model_key, search_key = jax.random.split(key)
         observation = jax.tree_map(lambda x: jnp.expand_dims(x, axis=0), observation)
@@ -199,13 +205,14 @@ class AlphaZero(AnakinAgent):
             rng_key=search_key,
             root=root,
             recurrent_fn=self._recurrent_fn,
-            num_simulations=self.config.num_simulations,
+            num_simulations=num_simulations or self.config.num_simulations,
             invalid_actions=invalid_actions,
             max_depth=self.config.max_depth,
             dirichlet_fraction=self.config.root_exploration_fraction,
             dirichlet_alpha=self.config.root_dirichlet_alpha,
             pb_c_base=self.config.pb_c_base,
             pb_c_init=self.config.pb_c_init,
+            temperature=0.0 if deterministic else 1.0,
         )
 
         policy_output, value = jax.tree_map(lambda x: jnp.squeeze(x, axis=0), (policy_output, value))

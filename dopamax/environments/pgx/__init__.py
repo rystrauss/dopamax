@@ -1,1 +1,1 @@
-from .connect_four import ConnectFourEnvironment
+from .connect_four import ConnectFour

@@ -1,6 +1,7 @@
 import os
 import pickle
 import random
+from functools import partial
 
 import click
 import einops
@@ -10,6 +11,7 @@ import jax.random
 import numpy as np
 import wandb
 import yaml
+from chex import PRNGKey
 from dm_env import StepType
 from ml_collections import ConfigDict
 from tqdm import tqdm
@@ -18,6 +20,7 @@ from dopamax.agents.utils import get_agent_cls
 from dopamax.callbacks import WandbCallback
 from dopamax.environments import make_env
 from dopamax.rollouts import rollout_episode, SampleBatch
+from dopamax.typing import Observation
 
 
 @click.group()
@@ -103,8 +106,8 @@ def evaluate(agent_artifact, num_episodes, render):
 
     rollout_fn = jax.jit(rollout_episode, static_argnums=(0, 1, 4))
 
-    def policy_fn(*args):
-        return agent.compute_action(*args, deterministic=True), {}
+    def policy_fn(params: hk.Params, key: PRNGKey, observation: Observation):
+        return hk.expand_apply(partial(agent.compute_action, params, key))(observation), {}
 
     prng = hk.PRNGSequence(random.randint(0, 2**32 - 1))
 

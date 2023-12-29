@@ -1,7 +1,6 @@
 from functools import partial
 from typing import Tuple, Dict
 
-import chex
 import distrax
 import haiku as hk
 import jax
@@ -117,9 +116,7 @@ class PPO(AnakinAgent):
     def compute_action(
         self, params: hk.Params, key: PRNGKey, observation: Observation, deterministic: bool = True
     ) -> Action:
-        jax.tree_map(chex.assert_shape, observation, self.env.observation_space.shape)
-
-        pi, _ = expand_apply(partial(self._model.apply, params, key))(observation)
+        pi, _ = self._model.apply(params, key, observation)
 
         if deterministic:
             if isinstance(pi, distrax.Categorical):

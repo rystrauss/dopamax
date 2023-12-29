@@ -86,8 +86,6 @@ class AlphaZero(AnakinAgent):
                 next_time_step.observation["invalid_actions"], jnp.finfo(prior_logits.dtype).min, prior_logits
             )
 
-            value = jnp.where(next_time_step.discount == 0.0, 0.0, value)
-
             recurrent_fn_output = mctx.RecurrentFnOutput(
                 reward=next_time_step.reward,
                 discount=-next_time_step.discount,
@@ -130,13 +128,15 @@ class AlphaZero(AnakinAgent):
                 pb_c_init=self.config.pb_c_init,
             )
 
-            policy_output, value = jax.tree_map(lambda x: jnp.squeeze(x, axis=0), (policy_output, value))
+            target_value = policy_output.search_tree.summary().value
 
-            action = policy_output.action
-            target_value = policy_output.search_tree.node_values[action]
+            policy_output, value, target_value = jax.tree_map(
+                lambda x: jnp.squeeze(x, axis=0), (policy_output, value, target_value)
+            )
 
             return policy_output.action, {
                 SampleBatch.ACTION: policy_output.action,
+                SampleBatch.VALUE: value,
                 "search_target_value": target_value,
                 "search_action_weights": policy_output.action_weights,
             }
@@ -187,10 +187,14 @@ class AlphaZero(AnakinAgent):
         num_simulations: Optional[int] = None,
     ) -> Action:
         model_key, search_key = jax.random.split(key)
-        observation = jax.tree_map(lambda x: jnp.expand_dims(x, axis=0), observation)
-        env_state = jax.tree_map(lambda x: jnp.expand_dims(x, axis=0), env_state)
 
         pi, value = self._model.apply(params, model_key, observation["observation"])
+
+        if num_simulations == 0:
+            if deterministic:
+                return pi.mode()
+            else:
+                return pi.sample(key=key)
 
         root = mctx.RootFnOutput(prior_logits=pi.logits, value=value, embedding=env_state)
 
@@ -215,7 +219,6 @@ class AlphaZero(AnakinAgent):
             temperature=0.0 if deterministic else 1.0,
         )
 
-        policy_output, value = jax.tree_map(lambda x: jnp.squeeze(x, axis=0), (policy_output, value))
         return policy_output.action
 
     def _initial_train_state_without_replay_buffer(

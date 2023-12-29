@@ -1,16 +1,16 @@
-env_name: "ConnectFour"
+env_name: "TicTacToe"
 agent_name: "AlphaZero"
-train_iterations: 800
+train_iterations: 200
 callback_freq: 5
 # Comment out the seed if you want each run to be different.
-seed: 4221010936
+#seed: 138722729
 agent_config:
   num_devices: 1
   num_envs_per_device: 1
   batch_size: 32
   rollout_fragment_length: 2048
   num_simulations: 32
-  max_depth: 42
+  max_depth: 9
   root_dirichlet_alpha: 0.3
   root_exploration_fraction: 0.25
   pb_c_base: 19652
@@ -18,10 +18,10 @@ agent_config:
   weight_decay: 0.0001
   momentum: 0.9
   lr_init: 0.002
-  lr_decay_steps: 20000
+  lr_decay_steps: 10000
   value_loss_coefficient: 0.25
   buffer_size: 4096
   num_updates: 64
   network: "mlp"
   network_config:
-    hidden_units: [ 32, 32, 32 ]
+    hidden_units: [ 32, 32 ]

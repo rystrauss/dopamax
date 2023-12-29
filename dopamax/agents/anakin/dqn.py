@@ -1,7 +1,6 @@
 from functools import partial
 from typing import Tuple, Dict
 
-import chex
 import distrax
 import haiku as hk
 import jax
@@ -124,8 +123,7 @@ class DQN(AnakinAgent):
         observation: Observation,
         deterministic: bool = True,
     ) -> Action:
-        jax.tree_map(chex.assert_shape, observation, self.env.observation_space.shape)
-        preferences = expand_apply(partial(self._model.apply, params["online"], key))(observation)
+        preferences = self._model.apply(params["online"], key, observation)
         pi = distrax.Categorical(logits=preferences)
         return pi.mode() if deterministic else pi.sample(seed=key)
 

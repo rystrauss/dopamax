@@ -71,9 +71,20 @@ class Agent(ABC):
         return self._env.action_space
 
     @abstractmethod
-    def compute_action(
-        self, params: hk.Params, key: PRNGKey, observation: Observation, deterministic: bool = True
-    ) -> Action:
+    def compute_action(self, params: hk.Params, key: PRNGKey, observation: Observation, **kwargs) -> Action:
+        """Computes an action for given observations.
+
+        Args:
+            params: The agent's params.
+            key: A PRNG key.
+            observation: Observations to compute actions for. It is assumed that the observations will have a batch
+                dimension.
+            **kwargs: Additional keyword arguments that some agents may provide for customization of how actions
+                are computed.
+
+        Returns:
+            An array of actions corresponding to the given observations.
+        """
         pass
 
     @abstractmethod

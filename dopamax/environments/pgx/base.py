@@ -33,6 +33,7 @@ class PGXEnvironment(Environment, ABC):
             },
             {
                 "current_player": pgx_state.current_player,
+                "player_rewards": pgx_state.rewards,
             },
         )
         env_state = PGXEnvState(
@@ -83,6 +84,7 @@ class PGXEnvironment(Environment, ABC):
             step_type=jax.lax.select(done, StepType.LAST, StepType.MID),
             info={
                 "current_player": new_pgx_state.current_player,
+                "player_rewards": new_pgx_state.rewards,
             },
         )
 

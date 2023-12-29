@@ -14,7 +14,7 @@ with open(os.path.join(CURRENT_DIR, "README.md"), encoding="utf-8") as f:
 
 setup(
     name="dopamax",
-    version="0.1.1",
+    version="0.2.0",
     author="Ryan Strauss",
     author_email="ryanrstrauss@icloud.com",
     description="Reinforcement learning in pure JAX.",

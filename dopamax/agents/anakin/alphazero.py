@@ -51,6 +51,19 @@ _DEFAULT_ALPHAZERO_CONFIG = ConfigDict(
 
 @register("AlphaZero")
 class AlphaZero(AnakinAgent):
+    """AlphaZero agent.
+
+    Note that this implementation is slightly modified from original version of the algorithm as to adhere to the
+    Anakin architecture. It also uses a more modern version of Monte Carlo Tree Search, as implemented by
+    `mctx.muzero_policy`.
+
+    Args:
+        env: The environment to interact with. This should be a subclass of `PGXEnvironment`.
+        config: The configuration dictionary for the agent.
+
+    References:
+        https://arxiv.org/abs/1712.01815
+    """
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
 

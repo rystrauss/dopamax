@@ -21,6 +21,15 @@ class PGXEnvState(EnvState):
 
 @dataclass(frozen=True)
 class PGXEnvironment(Environment, ABC):
+    """Abstract base class for PGX environments.
+
+    PGX is a collection of JAX-native implementations of discrete state space environments like Chess, Shogi, and Go.
+    This class serves as a wrapper around PGX environments in order to make them conform to the dopamax environment
+    API.
+
+    References:
+        https://github.com/sotetsuk/pgx
+    """
     _pgx_env: pgx.Env
 
     def reset(self, key: PRNGKey) -> Tuple[TimeStep, PGXEnvState]:

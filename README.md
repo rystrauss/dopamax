@@ -18,7 +18,7 @@
 Dopamax is a library containing pure [JAX][1] implementations of common reinforcement learning algorithms. _Everything_
 is implemented in JAX, including the environments. This allows for extremely fast training and evaluation of agents,
 because the entire loop of environment simulation, agent interaction, and policy updates can be compiled as a single
-XLA program and executed on CPUs, GPUs, or TPUs. More specifically, rhe implementations in Dopamax follow the
+XLA program and executed on CPUs, GPUs, or TPUs. More specifically, the implementations in Dopamax follow the
 Anakin Podracer architecture -- see [this paper][2] for more details.
 
 **Note that this repository is not actively maintained and is subject to breaking changes at any time.**
@@ -27,6 +27,7 @@ Anakin Podracer architecture -- see [this paper][2] for more details.
 
 - [Proximal Policy Optimization (PPO)](dopamax/agents/anakin/ppo.py)
 - [Deep Q-Network (DQN)](dopamax/agents/anakin/dqn.py)
+- [AlphaZero](dopamax/agents/anakin/alphazero.py)
 
 ## Installation
 
@@ -84,3 +85,11 @@ mean, and maximum episode reward will be logged back to W&B. If you would additi
 have then logged back to W&B, you can provide the `--render` flag. But note that this will usually significantly slow
 down the evaluation process since environment rendering is not a pure JAX function and requires callbacks to the host.
 You should usually only use the `--render` flag with a small number of episodes.
+
+## See Also
+
+Some of the JAX-native packages that Dopamax relies on:
+- [sotetsuk/pgx](https://github.com/sotetsuk/pgx)
+- [deepmind/mctx](https://github.com/deepmind/mctx)
+- [deepmind/rlax](https://github.com/deepmind/rlax)
+- [google/brax](https://github.com/google/brax)

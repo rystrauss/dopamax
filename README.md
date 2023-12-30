@@ -21,7 +21,8 @@ because the entire loop of environment simulation, agent interaction, and policy
 XLA program and executed on CPUs, GPUs, or TPUs. More specifically, the implementations in Dopamax follow the
 Anakin Podracer architecture -- see [this paper][2] for more details.
 
-**Note that this repository is not actively maintained and is subject to breaking changes at any time.**
+> [!WARNING] 
+> Note that this repository is not actively maintained and is subject to breaking changes at any time.
 
 ## Supported Algorithms
 
@@ -41,6 +42,13 @@ This will install the `dopamax` Python package, as well as a command-line interf
 Note that only the CPU version of JAX is installed by default. If you would like to use a GPU or TPU, you will need to
 install the appropriate version of JAX. See the
 [JAX installation instructions](https://github.com/google/jax#installation).
+
+> [!NOTE]  
+> The above command will install the latest "release" of Dopamax, which may not necessarily align with the latest
+> commit in the main branch. To install the version found in the main branch of this repository, you can use:
+> ```bash
+> pip install git+https://github.com/rystrauss/dopamax.git
+> ```
 
 ## Usage
 

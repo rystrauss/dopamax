@@ -31,7 +31,7 @@ class BraxEnvironment(Environment, ABC):
 
     @property
     def fps(self) -> Optional[int]:
-        return 1 // self._brax_env.sys.config.dt
+        return 1 // self._brax_env.sys.dt
 
     @property
     def render_shape(self) -> Optional[Tuple[int, int, int]]:

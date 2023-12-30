@@ -47,6 +47,8 @@ _DEFAULT_PPO_CONFIG = ConfigDict(
         "entropy_coef": 0.01,
         # The coefficient for the value loss.
         "value_coef": 0.5,
+        # Multiplier applied to rewards when computing losses.
+        "reward_scaling": 1.0,
         # The type of network to use.
         "network": "mlp",
         # The configuration dictionary for the network.
@@ -194,13 +196,13 @@ class PPO(AnakinAgent):
         values = jnp.concatenate([rollout_data[SampleBatch.VALUE], jnp.expand_dims(final_value, axis=0)], axis=0)
 
         rollout_data[SampleBatch.RETURN] = rlax.discounted_returns(
-            rollout_data[SampleBatch.REWARD],
+            rollout_data[SampleBatch.REWARD] * self.config.reward_scaling,
             rollout_data[SampleBatch.DISCOUNT] * self.config.gamma,
             v_t=0.0,
         )
 
         rollout_data[SampleBatch.ADVANTAGE] = rlax.truncated_generalized_advantage_estimation(
-            rollout_data[SampleBatch.REWARD],
+            rollout_data[SampleBatch.REWARD] * self.config.reward_scaling,
             rollout_data[SampleBatch.DISCOUNT] * self.config.gamma,
             self.config.lambda_,
             values,

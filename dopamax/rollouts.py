@@ -76,13 +76,13 @@ def rollout_episode(
                 env.render,
                 jax.ShapeDtypeStruct(env.render_shape, jnp.uint8),
                 env_state,
-                vectorized=False,
+                vmap_method="sequential",
             )
 
         if pass_env_state_to_policy:
             policy_fn_kwargs["env_state"] = env_state
 
-        jax.tree_map(chex.assert_shape, time_step.observation, env.observation_space.shape)
+        jax.tree.map(chex.assert_shape, time_step.observation, env.observation_space.shape)
         action, policy_info = policy_fn(policy_params, policy_key, time_step.observation, **policy_fn_kwargs)
 
         next_time_step, next_env_state = env.step(step_key, env_state, action)
@@ -156,7 +156,7 @@ def rollout_truncated(
         if pass_env_state_to_policy:
             policy_fn_kwargs["env_state"] = env_state
 
-        jax.tree_map(chex.assert_shape, time_step.observation, env.observation_space.shape)
+        jax.tree.map(chex.assert_shape, time_step.observation, env.observation_space.shape)
         action, policy_info = policy_fn(policy_params, policy_key, time_step.observation, **policy_fn_kwargs)
 
         next_time_step, next_env_state = env.step(step_key, env_state, action)
@@ -173,7 +173,7 @@ def rollout_truncated(
             **policy_info,
         }
 
-        next_time_step, next_env_state = jax.tree_map(
+        next_time_step, next_env_state = jax.tree.map(
             lambda x, y: jax.lax.select(next_time_step.step_type == StepType.LAST, x, y),
             env.reset(reset_env_key),
             (next_time_step, next_env_state),
@@ -200,7 +200,7 @@ def create_minibatches(key: PRNGKey, rollout_data: SampleBatch, minibatch_size: 
     Returns:
         A SampleBatch containing the minibatches.
     """
-    return jax.tree_map(
+    return jax.tree.map(
         lambda x: einops.rearrange(
             jax.random.permutation(key, x, independent=False),
             "(n m) ... -> n m ...",

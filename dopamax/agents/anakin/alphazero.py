@@ -82,13 +82,13 @@ class AlphaZero(AnakinAgent):
         def recurrent_fn(
             params: hk.Params, key: PRNGKey, action: Array, embedding: RecurrentState
         ) -> Tuple[RecurrentFnOutput, RecurrentState]:
-            env_state = jax.tree_map(lambda x: jnp.squeeze(x, axis=0), embedding)
+            env_state = jax.tree.map(lambda x: jnp.squeeze(x, axis=0), embedding)
             action = jnp.squeeze(action, axis=0)
 
             env_key, model_key = jax.random.split(key)
 
             next_time_step, next_env_state = env.step(env_key, env_state, action)
-            next_time_step, next_env_state = jax.tree_map(
+            next_time_step, next_env_state = jax.tree.map(
                 lambda x: jnp.expand_dims(x, axis=0), (next_time_step, next_env_state)
             )
 
@@ -114,8 +114,8 @@ class AlphaZero(AnakinAgent):
             params: hk.Params, key: PRNGKey, observation: Observation, env_state: EnvState
         ) -> Tuple[Action, Dict[str, ArrayTree]]:
             model_key, search_key = jax.random.split(key)
-            observation = jax.tree_map(lambda x: jnp.expand_dims(x, axis=0), observation)
-            env_state = jax.tree_map(lambda x: jnp.expand_dims(x, axis=0), env_state)
+            observation = jax.tree.map(lambda x: jnp.expand_dims(x, axis=0), observation)
+            env_state = jax.tree.map(lambda x: jnp.expand_dims(x, axis=0), env_state)
 
             pi, value = self._model.apply(params, model_key, observation["observation"])
 
@@ -143,7 +143,7 @@ class AlphaZero(AnakinAgent):
 
             target_value = policy_output.search_tree.summary().value
 
-            policy_output, value, target_value = jax.tree_map(
+            policy_output, value, target_value = jax.tree.map(
                 lambda x: jnp.squeeze(x, axis=0), (policy_output, value, target_value)
             )
 
@@ -180,7 +180,7 @@ class AlphaZero(AnakinAgent):
             temp_train_state.env_state,
         )
 
-        sample = jax.tree_map(lambda x: jnp.empty(x.shape, x.dtype)[0], rollout_data_spec)
+        sample = jax.tree.map(lambda x: jnp.empty(x.shape, x.dtype)[0], rollout_data_spec)
 
         self._buffer = UniformSamplingQueue(self.config.buffer_size, sample, self.config.batch_size)
 
@@ -321,7 +321,7 @@ class AlphaZero(AnakinAgent):
             length=self.config.num_updates,
         )
 
-        metrics = jax.tree_map(jnp.mean, metrics)
+        metrics = jax.tree.map(jnp.mean, metrics)
 
         next_train_state = train_state.update(
             new_key=next_train_state_key,

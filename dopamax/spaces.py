@@ -201,7 +201,7 @@ class Dict(Space):
     """
 
     def __init__(self, spaces: typing.Dict[typing.Hashable, Space]):
-        dtype = jax.tree_map(lambda s: s.dtype, spaces)
+        dtype = jax.tree.map(lambda s: s.dtype, spaces)
         super().__init__(dtype)
 
         self.spaces = spaces
@@ -211,7 +211,7 @@ class Dict(Space):
 
     @property
     def shape(self) -> typing.Tuple[int, ...]:
-        return jax.tree_map(lambda s: s.shape, self.spaces)
+        return jax.tree.map(lambda s: s.shape, self.spaces)
 
     def sample(self, key: PRNGKey) -> ArrayTree:
         sample_keys = jax.random.split(key, len(self.spaces))

@@ -177,7 +177,7 @@ class DQN(AnakinAgent):
         updates, new_opt_state = self._optimizer.update(grads, opt_state, params["online"])
         new_online_params = optax.apply_updates(params["online"], updates)
 
-        new_target_params = jax.tree_map(
+        new_target_params = jax.tree.map(
             lambda a, b: jax.lax.select(
                 jnp.logical_and(
                     jnp.any(train_step > self.config.learning_starts),
@@ -212,7 +212,7 @@ class DQN(AnakinAgent):
         new_buffer_state = self._buffer.insert(train_state.buffer_state, rollout_data)
         new_buffer_state, sample = self._buffer.sample(new_buffer_state)
 
-        sample = jax.tree_map(lambda x: jnp.squeeze(x, 1), sample)
+        sample = jax.tree.map(lambda x: jnp.squeeze(x, 1), sample)
 
         new_params, new_opt_state, metrics = self._update(
             train_state.train_step,
@@ -226,7 +226,7 @@ class DQN(AnakinAgent):
             sample[SampleBatch.DISCOUNT],
         )
 
-        metrics = jax.tree_map(jnp.mean, metrics)
+        metrics = jax.tree.map(jnp.mean, metrics)
 
         next_train_state = train_state.update(
             new_key=next_train_state_key,
@@ -250,7 +250,7 @@ class DQN(AnakinAgent):
             maybe_all_reduce_fn=self._maybe_all_reduce,
         )
 
-        next_train_state = jax.tree_map(
+        next_train_state = jax.tree.map(
             lambda a, b: jax.lax.select(jnp.any(train_state.train_step > self.config.learning_starts), a, b),
             next_train_state,
             warmup_train_state,

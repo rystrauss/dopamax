@@ -119,7 +119,7 @@ class AnakinTrainState(TrainState):
                 sample[SampleBatch.STEP_TYPE] == StepType.LAST,
                 lambda: q.insert(
                     state,
-                    jax.tree_map(
+                    jax.tree.map(
                         lambda t: jnp.expand_dims(t, -1),
                         {
                             SampleBatch.EPISODE_LENGTH: sample[SampleBatch.EPISODE_LENGTH],
@@ -235,7 +235,7 @@ class AnakinTrainStateWithReplayBuffer(AnakinTrainState):
                 sample[SampleBatch.STEP_TYPE] == StepType.LAST,
                 lambda: q.insert(
                     state,
-                    jax.tree_map(
+                    jax.tree.map(
                         lambda t: jnp.expand_dims(t, -1),
                         {
                             SampleBatch.EPISODE_LENGTH: sample[SampleBatch.EPISODE_LENGTH],
@@ -343,7 +343,7 @@ class AnakinAgent(Agent, ABC):
         def train_fn(initial_train_state):
             new_train_state, metrics = jax.lax.scan(scan_fn, initial_train_state, None, length=callback_freq)
 
-            metrics = jax.tree_map(jnp.mean, metrics)
+            metrics = jax.tree.map(jnp.mean, metrics)
 
             return new_train_state, metrics
 
@@ -362,11 +362,11 @@ class AnakinAgent(Agent, ABC):
 
             callback_train_state = train_state
             if self.config.num_envs_per_device > 1:
-                callback_train_state = jax.tree_map(lambda x: x[0], callback_train_state)
+                callback_train_state = jax.tree.map(lambda x: x[0], callback_train_state)
 
             if self.config.num_devices > 1:
-                callback_train_state = jax.tree_map(lambda x: x[0], callback_train_state)
-                metrics = jax.tree_map(lambda x: x[0], metrics)
+                callback_train_state = jax.tree.map(lambda x: x[0], callback_train_state)
+                metrics = jax.tree.map(lambda x: x[0], metrics)
 
             episode_buffer = AnakinTrainState.episode_buffer()
             sample_fn = episode_buffer.sample_internal
@@ -381,11 +381,11 @@ class AnakinAgent(Agent, ABC):
             episodes = jax.device_get(episodes)
 
             if self.config.num_envs_per_device > 1 or self.config.num_devices > 1:
-                episodes = jax.tree_map(
+                episodes = jax.tree.map(
                     lambda x: einops.rearrange(x, "... t e -> (t ...) e")[:, -_EPISODE_BUFFER_SIZE:], episodes
                 )
 
-            episodes = jax.tree_map(lambda x: x[episodes[SampleBatch.EPISODE_LENGTH] != -1], episodes)
+            episodes = jax.tree.map(lambda x: x[episodes[SampleBatch.EPISODE_LENGTH] != -1], episodes)
 
             episode_metrics = {
                 "min_episode_reward": np.min(episodes[SampleBatch.EPISODE_REWARD]),

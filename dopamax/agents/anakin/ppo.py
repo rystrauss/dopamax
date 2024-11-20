@@ -243,7 +243,7 @@ class PPO(AnakinAgent):
             length=self.config.num_epochs,
         )
 
-        metrics = jax.tree_map(jnp.mean, metrics)
+        metrics = jax.tree.map(jnp.mean, metrics)
 
         next_train_state = train_state.update(
             new_key=next_train_state_key,

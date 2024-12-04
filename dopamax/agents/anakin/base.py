@@ -2,14 +2,15 @@ from abc import ABC
 from typing import Optional, Sequence, Callable
 
 import einops
+import flashbax as fbx
 import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from brax.training.replay_buffers import ReplayBufferState, Queue
 from chex import PRNGKey, ArrayTree, dataclass
 from dm_env import StepType
+from flashbax.buffers.trajectory_buffer import TrajectoryBuffer, BufferState
 from ml_collections import ConfigDict
 from tqdm import tqdm
 
@@ -22,26 +23,18 @@ from dopamax.rollouts import SampleBatch
 class AnakinTrainState(TrainState):
     """Dataclass for storing the training state of an Anakin agent."""
 
-    key: PRNGKey
-    train_step: int
-    total_timesteps: int
-    total_episodes: int
-    episode_buffer_state: ReplayBufferState
     params: hk.Params
     opt_state: optax.OptState
     time_step: TimeStep
     env_state: EnvState
 
     @staticmethod
-    def episode_buffer() -> Queue:
-        return Queue(
-            max_replay_size=_EPISODE_BUFFER_SIZE,
-            dummy_data_sample={
-                SampleBatch.EPISODE_LENGTH: 0,
-                SampleBatch.EPISODE_REWARD: 0.0,
-            },
+    def episode_buffer() -> TrajectoryBuffer:
+        return fbx.make_item_buffer(
+            max_length=_EPISODE_BUFFER_SIZE,
+            min_length=_EPISODE_BUFFER_SIZE,
             sample_batch_size=_EPISODE_BUFFER_SIZE,
-            cyclic=True,
+            add_batches=True,
         )
 
     @classmethod
@@ -61,8 +54,13 @@ class AnakinTrainState(TrainState):
             The initial training state.
         """
         q = AnakinTrainState.episode_buffer()
-        episode_buffer_state = q.init(key)
-        episode_buffer_state = q.insert(
+        episode_buffer_state = q.init(
+            {
+                SampleBatch.EPISODE_LENGTH: 0,
+                SampleBatch.EPISODE_REWARD: 0.0,
+            }
+        )
+        episode_buffer_state = q.add(
             episode_buffer_state,
             {
                 SampleBatch.EPISODE_LENGTH: -jnp.ones((_EPISODE_BUFFER_SIZE,), jnp.int32),
@@ -117,7 +115,7 @@ class AnakinTrainState(TrainState):
         def scan_fn(state, sample):
             state = jax.lax.cond(
                 sample[SampleBatch.STEP_TYPE] == StepType.LAST,
-                lambda: q.insert(
+                lambda: q.add(
                     state,
                     jax.tree.map(
                         lambda t: jnp.expand_dims(t, -1),
@@ -148,7 +146,7 @@ class AnakinTrainState(TrainState):
 
 @dataclass(frozen=True)
 class AnakinTrainStateWithReplayBuffer(AnakinTrainState):
-    buffer_state: ReplayBufferState
+    buffer_state: BufferState
 
     @classmethod
     def initial(
@@ -158,7 +156,7 @@ class AnakinTrainStateWithReplayBuffer(AnakinTrainState):
         opt_state: optax.OptState,
         time_step: TimeStep,
         env_state: EnvState,
-        buffer_state: ReplayBufferState,
+        buffer_state: BufferState,
     ) -> "AnakinTrainStateWithReplayBuffer":
         """Creates an initial training state.
 
@@ -174,8 +172,13 @@ class AnakinTrainStateWithReplayBuffer(AnakinTrainState):
             The initial training state.
         """
         q = AnakinTrainState.episode_buffer()
-        episode_buffer_state = q.init(key)
-        episode_buffer_state = q.insert(
+        episode_buffer_state = q.init(
+            {
+                SampleBatch.EPISODE_LENGTH: 0,
+                SampleBatch.EPISODE_REWARD: 0.0,
+            }
+        )
+        episode_buffer_state = q.add(
             episode_buffer_state,
             {
                 SampleBatch.EPISODE_LENGTH: -jnp.ones((_EPISODE_BUFFER_SIZE,), jnp.int32),
@@ -204,7 +207,7 @@ class AnakinTrainStateWithReplayBuffer(AnakinTrainState):
         new_opt_state: optax.OptState,
         new_time_step: TimeStep,
         new_env_state: EnvState,
-        new_buffer_state: ReplayBufferState,
+        new_buffer_state: BufferState,
         maybe_all_reduce_fn: Callable[[str, ArrayTree], ArrayTree],
     ) -> "AnakinTrainStateWithReplayBuffer":
         """Updates a training state after the completion of a new training iteration.
@@ -233,7 +236,7 @@ class AnakinTrainStateWithReplayBuffer(AnakinTrainState):
         def scan_fn(state, sample):
             state = jax.lax.cond(
                 sample[SampleBatch.STEP_TYPE] == StepType.LAST,
-                lambda: q.insert(
+                lambda: q.add(
                     state,
                     jax.tree.map(
                         lambda t: jnp.expand_dims(t, -1),
@@ -369,7 +372,7 @@ class AnakinAgent(Agent, ABC):
                 metrics = jax.tree.map(lambda x: x[0], metrics)
 
             episode_buffer = AnakinTrainState.episode_buffer()
-            sample_fn = episode_buffer.sample_internal
+            sample_fn = lambda x: episode_buffer.sample(x, jax.random.PRNGKey(0))
 
             if self.config.num_envs_per_device > 1:
                 sample_fn = jax.vmap(sample_fn)
@@ -377,7 +380,7 @@ class AnakinAgent(Agent, ABC):
             if self.config.num_devices > 1:
                 sample_fn = jax.vmap(sample_fn)
 
-            _, episodes = sample_fn(train_state.episode_buffer_state)
+            episodes = sample_fn(train_state.episode_buffer_state).experience
             episodes = jax.device_get(episodes)
 
             if self.config.num_envs_per_device > 1 or self.config.num_devices > 1:

@@ -1,12 +1,12 @@
 from functools import partial
 from typing import Tuple, Dict, Optional
 
+import flashbax as fbx
 import haiku as hk
 import jax
 import jax.numpy as jnp
 import mctx
 import optax
-from brax.training.replay_buffers import UniformSamplingQueue
 from chex import PRNGKey, Array, ArrayTree
 from mctx._src.base import RecurrentState, RecurrentFnOutput
 from ml_collections import ConfigDict
@@ -64,6 +64,7 @@ class AlphaZero(AnakinAgent):
     References:
         https://arxiv.org/abs/1712.01815
     """
+
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
 
@@ -182,7 +183,13 @@ class AlphaZero(AnakinAgent):
 
         sample = jax.tree.map(lambda x: jnp.empty(x.shape, x.dtype)[0], rollout_data_spec)
 
-        self._buffer = UniformSamplingQueue(self.config.buffer_size, sample, self.config.batch_size)
+        self._buffer = fbx.make_item_buffer(
+            max_length=self.config.buffer_size,
+            min_length=self.config.batch_size,
+            sample_batch_size=self.config.batch_size,
+            add_batches=True,
+        )
+        self._buffer_initial_state = self._buffer.init(sample)
 
     @staticmethod
     def default_config() -> ConfigDict:
@@ -250,7 +257,7 @@ class AlphaZero(AnakinAgent):
             consistent_key, divergent_key
         )
         return AnakinTrainStateWithReplayBuffer(
-            **dict(train_state_without_replay_buffer), buffer_state=self._buffer.init(consistent_key)
+            **dict(train_state_without_replay_buffer), buffer_state=self._buffer_initial_state
         )
 
     def _loss(self, params, key, obs, search_action_weights, search_target_value):
@@ -291,14 +298,14 @@ class AlphaZero(AnakinAgent):
             train_state.env_state,
         )
 
-        new_buffer_state = self._buffer.insert(train_state.buffer_state, rollout_data)
+        new_buffer_state = self._buffer.add(train_state.buffer_state, rollout_data)
 
         def update_scan_fn(carry, _):
-            params, opt_state, buffer_state, key = carry
+            params, opt_state, key = carry
 
-            next_key, update_key = jax.random.split(key)
+            next_key, update_key, sample_key = jax.random.split(key, 3)
 
-            new_buffer_state, batch = self._buffer.sample(buffer_state)
+            batch = self._buffer.sample(new_buffer_state, sample_key).experience
 
             new_params, new_opt_state, info = self._update(
                 params,
@@ -312,11 +319,11 @@ class AlphaZero(AnakinAgent):
             schedule_count = opt_state[-2].count
             info["learning_rate"] = self._lr_schedule(schedule_count)
 
-            return (new_params, new_opt_state, new_buffer_state, next_key), info
+            return (new_params, new_opt_state, next_key), info
 
-        (new_params, new_opt_state, new_buffer_state, _), metrics = jax.lax.scan(
+        (new_params, new_opt_state, _), metrics = jax.lax.scan(
             update_scan_fn,
-            (train_state.params, train_state.opt_state, new_buffer_state, initial_update_key),
+            (train_state.params, train_state.opt_state, initial_update_key),
             None,
             length=self.config.num_updates,
         )

@@ -60,6 +60,7 @@ setup(
         "rlax>=0.1.6",
         "tqdm>=4.64.1",
         "wandb>=0.18.7",
+        "flashbax>=0.1.2",
     ],
     tests_require=[
         "pytest",

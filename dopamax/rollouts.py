@@ -35,8 +35,7 @@ class SampleBatch(dict):
 class PolicyFn(Protocol):
     def __call__(
         self, params: hk.Params, key: PRNGKey, observation: Observation, **kwargs
-    ) -> Tuple[Action, Dict[str, ArrayTree]]:
-        ...
+    ) -> Tuple[Action, Dict[str, ArrayTree]]: ...
 
 
 def rollout_episode(

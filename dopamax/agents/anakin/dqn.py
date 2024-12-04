@@ -2,12 +2,12 @@ from functools import partial
 from typing import Tuple, Dict
 
 import distrax
+import flashbax as fbx
 import haiku as hk
 import jax
 import jax.numpy as jnp
 import optax
 import rlax
-from brax.training.replay_buffers import UniformSamplingQueue
 from chex import PRNGKey, ArrayTree
 from ml_collections import ConfigDict
 
@@ -100,15 +100,22 @@ class DQN(AnakinAgent):
 
         temp_key = jax.random.PRNGKey(0)
         temp_train_state = self._initial_train_state_without_replay_buffer(temp_key, temp_key)
-        rollout_data, _, _, _ = self._rollout_fn(
+        rollout_data_spec, _, _, _ = jax.eval_shape(
+            self._rollout_fn,
             temp_train_state.params["online"],
             temp_train_state.key,
             temp_train_state.time_step,
             temp_train_state.env_state,
             epsilon=1.0,
         )
+        rollout_data = jax.tree.map(lambda x: jnp.empty(x.shape, x.dtype), rollout_data_spec)
 
-        self._buffer = UniformSamplingQueue(self.config.buffer_size, rollout_data, self.config.batch_size)
+        self._buffer = fbx.make_item_buffer(
+            max_length=self.config.buffer_size,
+            min_length=self.config.batch_size,
+            sample_batch_size=self.config.batch_size,
+        )
+        self._buffer_initial_state = self._buffer.init(rollout_data)
 
     @staticmethod
     def default_config() -> ConfigDict:
@@ -144,7 +151,7 @@ class DQN(AnakinAgent):
             consistent_key, divergent_key
         )
         return AnakinTrainStateWithReplayBuffer(
-            **dict(train_state_without_replay_buffer), buffer_state=self._buffer.init(consistent_key)
+            **dict(train_state_without_replay_buffer), buffer_state=self._buffer_initial_state
         )
 
     def _loss(self, online_params, target_params, key, obs, actions, rewards, next_obs, discounts):
@@ -197,7 +204,7 @@ class DQN(AnakinAgent):
     def train_step(
         self, train_state: AnakinTrainStateWithReplayBuffer
     ) -> Tuple[AnakinTrainStateWithReplayBuffer, Metrics]:
-        next_train_state_key, rollout_key, update_key = jax.random.split(train_state.key, 3)
+        next_train_state_key, rollout_key, update_key, sample_key = jax.random.split(train_state.key, 4)
 
         current_epsilon = self._epsilon_schedule(train_state.train_step)
 
@@ -209,8 +216,8 @@ class DQN(AnakinAgent):
             epsilon=current_epsilon,
         )
 
-        new_buffer_state = self._buffer.insert(train_state.buffer_state, rollout_data)
-        new_buffer_state, sample = self._buffer.sample(new_buffer_state)
+        new_buffer_state = self._buffer.add(train_state.buffer_state, rollout_data)
+        sample = self._buffer.sample(new_buffer_state, sample_key).experience
 
         sample = jax.tree.map(lambda x: jnp.squeeze(x, 1), sample)
 

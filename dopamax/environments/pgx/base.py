@@ -30,6 +30,7 @@ class PGXEnvironment(Environment, ABC):
     References:
         https://github.com/sotetsuk/pgx
     """
+
     _pgx_env: pgx.Env
 
     def reset(self, key: PRNGKey) -> Tuple[TimeStep, PGXEnvState]:

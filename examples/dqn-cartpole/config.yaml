@@ -3,7 +3,7 @@ agent_name: "DQN"
 train_iterations: 300000
 callback_freq: 1000
 # Comment out the seed if you want each run to be different.
-seed: 762110300
+seed: 3105622642
 agent_config:
   num_devices: 1
   num_envs_per_device: 1

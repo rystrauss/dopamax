@@ -390,14 +390,17 @@ class AnakinAgent(Agent, ABC):
 
             episodes = jax.tree.map(lambda x: x[episodes[SampleBatch.EPISODE_LENGTH] != -1], episodes)
 
-            episode_metrics = {
-                "min_episode_reward": np.min(episodes[SampleBatch.EPISODE_REWARD]),
-                "mean_episode_reward": np.mean(episodes[SampleBatch.EPISODE_REWARD]),
-                "max_episode_reward": np.max(episodes[SampleBatch.EPISODE_REWARD]),
-                "min_episode_length": np.min(episodes[SampleBatch.EPISODE_LENGTH]),
-                "mean_episode_length": np.mean(episodes[SampleBatch.EPISODE_LENGTH]),
-                "max_episode_length": np.max(episodes[SampleBatch.EPISODE_LENGTH]),
-            }
+            if len(episodes[SampleBatch.EPISODE_REWARD]) == 0:
+                episode_metrics = {}
+            else:
+                episode_metrics = {
+                    "min_episode_reward": np.min(episodes[SampleBatch.EPISODE_REWARD]),
+                    "mean_episode_reward": np.mean(episodes[SampleBatch.EPISODE_REWARD]),
+                    "max_episode_reward": np.max(episodes[SampleBatch.EPISODE_REWARD]),
+                    "min_episode_length": np.min(episodes[SampleBatch.EPISODE_LENGTH]),
+                    "mean_episode_length": np.mean(episodes[SampleBatch.EPISODE_LENGTH]),
+                    "max_episode_length": np.max(episodes[SampleBatch.EPISODE_LENGTH]),
+                }
 
             metrics = {**metrics, **episode_metrics}
 

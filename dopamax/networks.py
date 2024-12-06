@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from chex import Array
 
 from dopamax.spaces import Space, Discrete, Box
-from dopamax.typing import Observation
+from dopamax.typing import Observation, Action
 
 _registry = {}
 
@@ -201,6 +201,41 @@ def get_actor_critic_model_fn(
     return model_fn
 
 
+def get_deterministic_actor_model_fn(
+    action_space: Box,
+    network_build_fn: NetworkBuildFn,
+    final_hidden_units: Sequence[int] = tuple(),
+) -> Callable[[Observation], Array]:
+    bounded = bool(jnp.logical_and(action_space.bounded_above, action_space.bounded_below).any())
+
+    def model_fn(observations: Observation) -> Array:
+        base_net = network_build_fn()
+        base_net_output = base_net(observations)
+
+        policy_net = hk.Sequential(
+            [
+                hk.nets.MLP(final_hidden_units, w_init=hk.initializers.Orthogonal(jnp.sqrt(2.0))),
+                hk.Linear(action_space.shape[0], w_init=hk.initializers.Orthogonal(0.01)),
+            ]
+        )
+        policy_output = policy_net(base_net_output)
+
+        action_space_low = action_space.low[jnp.newaxis]
+        action_space_high = action_space.high[jnp.newaxis]
+
+        if bounded:
+
+            def squash(x):
+                x = jax.nn.sigmoid(2 * x)
+                return (action_space_high - action_space_low) * x + action_space_low
+
+            policy_output = squash(policy_output)
+
+        return policy_output
+
+    return model_fn
+
+
 def get_discrete_q_network_model_fn(
     action_space: Discrete,
     network_build_fn: NetworkBuildFn,
@@ -244,5 +279,44 @@ def get_discrete_q_network_model_fn(
             output = output_net(base_net_output)
 
         return output
+
+    return model_fn
+
+
+def get_continuous_q_network_model_fn(
+    observation_space: Space,
+    network_build_fn: NetworkBuildFn,
+    final_hidden_units: Sequence[int] = tuple(),
+    use_twin: bool = False,
+) -> Union[Callable[[Observation, Action], Array], Callable[[Observation, Action], Tuple[Array, Array]]]:
+    def model_fn(observations: Observation, actions: Action) -> Array:
+        base_net = network_build_fn()
+
+        output_net = hk.Sequential(
+            [
+                hk.nets.MLP(final_hidden_units, w_init=hk.initializers.Orthogonal(jnp.sqrt(2.0))),
+                hk.Linear(1, w_init=hk.initializers.Orthogonal(0.01)),
+            ]
+        )
+
+        concat_at_front = len(observation_space.shape) == 1
+
+        if concat_at_front:
+            latent = base_net(jnp.concatenate([observations, actions], axis=-1))
+        else:
+            latent = base_net(observations)
+            latent = jnp.concatenate([latent, actions])
+
+        return jnp.squeeze(output_net(latent), axis=-1)
+
+    if use_twin:
+
+        def twin_model_fn(observations: Observation, actions: Action) -> Tuple[Array, Array]:
+            q1_fn = get_continuous_q_network_model_fn(observation_space, network_build_fn, final_hidden_units)
+            q2_fn = get_continuous_q_network_model_fn(observation_space, network_build_fn, final_hidden_units)
+
+            return q1_fn(observations, actions), q2_fn(observations, actions)
+
+        return twin_model_fn
 
     return model_fn

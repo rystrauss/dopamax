@@ -46,7 +46,7 @@ _DEFAULT_DQN_CONFIG = ConfigDict(
         "network_config": {"hidden_units": [64, 64]},
         # Whether to use double q-learning.
         "double": True,
-        # Whether to use a dueling q-network architecture..
+        # Whether to use a dueling q-network architecture.
         "dueling": False,
         # Additional fully-connected layers to add after the base network before the output layer. At least one layer
         # must be added when using the dueling architecture.

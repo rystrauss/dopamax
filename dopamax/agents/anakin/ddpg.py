@@ -348,14 +348,13 @@ class DDPG(AnakinAgent):
 
         new_buffer_state = self._buffer.add(train_state.buffer_state, rollout_data)
 
-        if self.config.prioritized_replay:
-            sample = self._buffer.sample(new_buffer_state, sample_key).experience
-        else:
-            sample = self._buffer.sample(new_buffer_state, sample_key).experience
-
         batch = self._buffer.sample(new_buffer_state, sample_key)
         sample = batch.experience
-        weights = batch.priorities if self.config.prioritized_replay else 1.0
+        priorities = batch.priorities if self.config.prioritized_replay else 1.0
+
+        importance_weights = 1.0 / priorities
+        importance_weights **= self.config.prioritized_replay_beta
+        importance_weights /= jnp.max(importance_weights)
 
         sample = jax.tree_map(lambda x: jnp.squeeze(x, 1), sample)
 
@@ -369,11 +368,12 @@ class DDPG(AnakinAgent):
             sample[SampleBatch.REWARD],
             sample[SampleBatch.NEXT_OBSERVATION],
             sample[SampleBatch.DISCOUNT],
-            weights=weights,
+            importance_weights,
         )
 
         if self.config.prioritized_replay:
-            new_buffer_state = self._buffer.set_priorities(new_buffer_state, batch.indices, td_error)
+            new_priorities = jnp.abs(td_error) + 1e-6
+            new_buffer_state = self._buffer.set_priorities(new_buffer_state, batch.indices, new_priorities)
 
         metrics = jax.tree_map(jnp.mean, metrics)
 

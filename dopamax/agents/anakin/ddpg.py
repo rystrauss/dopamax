@@ -32,8 +32,6 @@ _DEFAULT_DDPG_CONFIG = ConfigDict(
         "learning_starts": 1500,
         "random_steps": 1500,
         "batch_size": 256,
-        "num_workers": 1,
-        "num_envs_per_worker": 1,
         "prioritized_replay": False,
         "prioritized_replay_alpha": 0.6,
         "initial_noise_scale": 0.1,

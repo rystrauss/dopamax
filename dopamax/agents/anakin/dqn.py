@@ -15,6 +15,7 @@ from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainStateWithReplayBu
 from dopamax.agents.utils import register
 from dopamax.environments.environment import Environment
 from dopamax.networks import get_network_build_fn, get_discrete_q_network_model_fn
+from dopamax.prioritized_item_buffer import create_prioritised_item_buffer
 from dopamax.rollouts import rollout_truncated, SampleBatch
 from dopamax.spaces import Discrete
 from dopamax.typing import Metrics, Observation, Action
@@ -48,6 +49,12 @@ _DEFAULT_DQN_CONFIG = ConfigDict(
         "double": True,
         # Whether to use a dueling q-network architecture.
         "dueling": False,
+        # Whether to use a prioritized experience replay.
+        "prioritized_replay": False,
+        # The alpha parameter used for prioritized experience replay.
+        "prioritized_replay_alpha": 0.6,
+        # The beta parameter used for prioritized experience replay.
+        "prioritized_replay_beta": 0.4,
         # Additional fully-connected layers to add after the base network before the output layer. At least one layer
         # must be added when using the dueling architecture.
         "final_hidden_units": (),
@@ -110,11 +117,22 @@ class DQN(AnakinAgent):
         )
         rollout_data = jax.tree.map(lambda x: jnp.empty(x.shape, x.dtype), rollout_data_spec)
 
-        self._buffer = fbx.make_item_buffer(
-            max_length=self.config.buffer_size,
-            min_length=self.config.batch_size,
-            sample_batch_size=self.config.batch_size,
-        )
+        if self.config.prioritized_replay:
+            self._buffer = create_prioritised_item_buffer(
+                max_length=self.config.buffer_size,
+                min_length=self.config.batch_size,
+                sample_batch_size=self.config.batch_size,
+                add_batches=False,
+                add_sequences=False,
+                priority_exponent=self.config.prioritized_replay_alpha,
+                device=jax.default_backend(),
+            )
+        else:
+            self._buffer = fbx.make_item_buffer(
+                max_length=self.config.buffer_size,
+                min_length=self.config.batch_size,
+                sample_batch_size=self.config.batch_size,
+            )
         self._buffer_initial_state = self._buffer.init(rollout_data)
 
     @staticmethod
@@ -154,7 +172,7 @@ class DQN(AnakinAgent):
             **dict(train_state_without_replay_buffer), buffer_state=self._buffer_initial_state
         )
 
-    def _loss(self, online_params, target_params, key, obs, actions, rewards, next_obs, discounts):
+    def _loss(self, online_params, target_params, key, obs, actions, rewards, next_obs, discounts, weights):
         next_q_values = self._model.apply(target_params, key, next_obs)
         q_values = self._model.apply(online_params, key, obs)
 
@@ -166,18 +184,21 @@ class DQN(AnakinAgent):
         else:
             td_error = jax.vmap(rlax.q_learning)(q_values, actions, rewards, discounts, next_q_values)
 
-        loss = jnp.mean(rlax.l2_loss(td_error))
+        loss = jnp.mean(rlax.l2_loss(td_error * weights))
 
         metrics = {
             "loss": loss,
+            "td_errors": td_error,
         }
 
         return loss, metrics
 
-    def _update(self, train_step, params, opt_state, key, obs, actions, rewards, next_obs, discounts):
+    def _update(self, train_step, params, opt_state, key, obs, actions, rewards, next_obs, discounts, weights):
         grads, info = jax.grad(self._loss, has_aux=True)(
-            params["online"], params["target"], key, obs, actions, rewards, next_obs, discounts
+            params["online"], params["target"], key, obs, actions, rewards, next_obs, discounts, weights
         )
+
+        td_errors = info.pop("td_errors")
 
         grads, info = self._maybe_all_reduce("pmean", (grads, info))
 
@@ -199,7 +220,7 @@ class DQN(AnakinAgent):
 
         new_params = {"online": new_online_params, "target": new_target_params}
 
-        return new_params, new_opt_state, info
+        return new_params, new_opt_state, info, td_errors
 
     def train_step(
         self, train_state: AnakinTrainStateWithReplayBuffer
@@ -217,11 +238,18 @@ class DQN(AnakinAgent):
         )
 
         new_buffer_state = self._buffer.add(train_state.buffer_state, rollout_data)
-        sample = self._buffer.sample(new_buffer_state, sample_key).experience
+
+        batch = self._buffer.sample(new_buffer_state, sample_key)
+        sample = batch.experience
+        priorities = batch.priorities if self.config.prioritized_replay else 1.0
+
+        importance_weights = 1.0 / priorities
+        importance_weights **= self.config.prioritized_replay_beta
+        importance_weights /= jnp.max(importance_weights)
 
         sample = jax.tree.map(lambda x: jnp.squeeze(x, 1), sample)
 
-        new_params, new_opt_state, metrics = self._update(
+        new_params, new_opt_state, metrics, td_error = self._update(
             train_state.train_step,
             train_state.params,
             train_state.opt_state,
@@ -231,7 +259,12 @@ class DQN(AnakinAgent):
             sample[SampleBatch.REWARD],
             sample[SampleBatch.NEXT_OBSERVATION],
             sample[SampleBatch.DISCOUNT],
+            importance_weights,
         )
+
+        if self.config.prioritized_replay:
+            new_priorities = jnp.abs(td_error) + 1e-6
+            new_buffer_state = self._buffer.set_priorities(new_buffer_state, batch.indices, new_priorities)
 
         metrics = jax.tree.map(jnp.mean, metrics)
 

@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 from chex import Array
 
+from dopamax.distributions import Transformed
 from dopamax.spaces import Space, Discrete, Box
 from dopamax.typing import Observation, Action
 
@@ -133,6 +134,7 @@ def get_actor_critic_model_fn(
     value_network: Optional[str] = None,
     free_log_std: bool = False,
     tanh_value: bool = False,
+    tanh_policy: bool = False,
 ) -> Callable[[Observation], Union[distrax.Distribution, Tuple[distrax.Distribution, Array]]]:
     """Gets a model function for a generic actor-critic agent.
 
@@ -149,6 +151,7 @@ def get_actor_critic_model_fn(
         free_log_std: If True, the scales of Gaussian policies will be learned as free parameters. Otherwise, they will
             be functions of the observations.
         tanh_value: If True, the value estimate will be passed through a tanh activation function.
+        tanh_policy: Whether to apply a Tanh bijector to the policy (only works for continuous action spaces).
 
     Returns:
         A model function for the specified actor-critic agent.
@@ -176,7 +179,12 @@ def get_actor_critic_model_fn(
                 )
                 loc, log_std = jnp.split(policy_params, 2, axis=-1)
 
+            log_std = jnp.clip(log_std, -20, 2)
             policy = distrax.MultivariateNormalDiag(loc, jnp.exp(log_std))
+
+            if tanh_policy:
+                policy = Transformed(policy, distrax.Block(distrax.Tanh(), ndims=1))
+
         else:
             raise NotImplementedError(f"Unsupported action space: {action_space}")
 
@@ -241,7 +249,8 @@ def get_discrete_q_network_model_fn(
     network_build_fn: NetworkBuildFn,
     final_hidden_units: Sequence[int] = tuple(),
     dueling: bool = False,
-) -> Callable[[Observation], Array]:
+    use_twin: bool = False,
+) -> Union[Callable[[Observation], Array], Callable[[Observation], Tuple[Array, Array]]]:
     def model_fn(observations: Observation) -> Array:
         base_net = network_build_fn()
         base_net_output = base_net(observations)
@@ -279,6 +288,16 @@ def get_discrete_q_network_model_fn(
             output = output_net(base_net_output)
 
         return output
+
+    if use_twin:
+
+        def twin_model_fn(observations: Observation) -> Tuple[Array, Array]:
+            q1_fn = get_discrete_q_network_model_fn(action_space, network_build_fn, final_hidden_units)
+            q2_fn = get_discrete_q_network_model_fn(action_space, network_build_fn, final_hidden_units)
+
+            return q1_fn(observations), q2_fn(observations)
+
+        return twin_model_fn
 
     return model_fn
 

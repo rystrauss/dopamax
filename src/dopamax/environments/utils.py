@@ -1,4 +1,4 @@
-from src.dopamax import Environment
+from dopamax import Environment
 
 _registry = {}
 

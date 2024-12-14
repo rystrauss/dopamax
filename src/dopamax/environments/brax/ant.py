@@ -2,9 +2,9 @@ import jax.numpy as jnp
 from brax import envs as brax_envs
 from chex import dataclass
 
-from src.dopamax import BraxEnvironment
-from src.dopamax import register
-from src.dopamax.spaces import Space, Box
+from dopamax import BraxEnvironment
+from dopamax import register
+from dopamax.spaces import Space, Box
 
 _NAME = "Ant"
 

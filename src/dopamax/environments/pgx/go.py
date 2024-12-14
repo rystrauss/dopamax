@@ -1,8 +1,8 @@
 import pgx
 from chex import dataclass
 
-from src.dopamax import PGXEnvironment
-from src.dopamax import register
+from dopamax import PGXEnvironment
+from dopamax import register
 
 _NAME_9x9 = "Go9x9"
 _NAME_19x19 = "Go19x19"

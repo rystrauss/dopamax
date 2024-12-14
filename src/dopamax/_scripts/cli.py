@@ -16,11 +16,11 @@ from dm_env import StepType
 from ml_collections import ConfigDict
 from tqdm import tqdm
 
-from src.dopamax.agents.utils import get_agent_cls
-from src.dopamax.callbacks import WandbCallback
-from src.dopamax import make_env
-from src.dopamax import rollout_episode, SampleBatch
-from src.dopamax.typing import Observation
+from dopamax.agents.utils import get_agent_cls
+from dopamax.callbacks import WandbCallback
+from dopamax import make_env
+from dopamax import rollout_episode, SampleBatch
+from dopamax.typing import Observation
 
 
 @click.group()
@@ -150,7 +150,7 @@ def agent_config(agent):
 @cli.command(short_help="Lists all available agents.")
 def list_agents():
     """Lists all available agents."""
-    from src.dopamax.agents.utils import _registry
+    from dopamax.agents.utils import _registry
 
     print("Available agents:")
     for agent_name in sorted(_registry.keys()):
@@ -160,7 +160,7 @@ def list_agents():
 @cli.command(short_help="Lists all available environments.")
 def list_environments():
     """Lists all available environments."""
-    from src.dopamax import _registry
+    from dopamax import _registry
 
     print("Available environments:")
     for agent_name in sorted(_registry.keys()):

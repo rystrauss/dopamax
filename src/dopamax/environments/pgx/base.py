@@ -7,9 +7,9 @@ import pgx
 from chex import dataclass, PRNGKey
 from dm_env import StepType
 
-from src.dopamax import Environment, EnvState, TimeStep
-from src.dopamax.spaces import Box, Space, Discrete, Dict
-from src.dopamax.typing import Action
+from dopamax import Environment, EnvState, TimeStep
+from dopamax.spaces import Box, Space, Discrete, Dict
+from dopamax.typing import Action
 
 
 @dataclass(frozen=True)

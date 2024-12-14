@@ -7,10 +7,10 @@ import numpy as np
 from chex import dataclass, PRNGKey
 from dm_env import StepType
 
-from src.dopamax import EnvState, Environment, TimeStep
-from src.dopamax import register
-from src.dopamax.spaces import Space, Discrete, Box
-from src.dopamax.typing import Observation, Action
+from dopamax import EnvState, Environment, TimeStep
+from dopamax import register
+from dopamax.spaces import Space, Discrete, Box
+from dopamax.typing import Observation, Action
 
 _NAME = "MountainCar"
 

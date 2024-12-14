@@ -1,6 +1,6 @@
 from typing import Type
 
-from src.dopamax.agents import Agent
+from dopamax.agents import Agent
 
 _registry = {}
 

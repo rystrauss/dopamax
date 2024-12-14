@@ -7,8 +7,8 @@ import numpy as np
 from chex import PRNGKey, dataclass
 from dm_env import StepType
 
-from src.dopamax.spaces import Space
-from src.dopamax.typing import Action, Observation
+from dopamax.spaces import Space
+from dopamax.typing import Action, Observation
 
 
 @dataclass(frozen=True)

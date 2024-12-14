@@ -1,8 +1,8 @@
 import pgx
 from chex import dataclass
 
-from src.dopamax import PGXEnvironment
-from src.dopamax import register
+from dopamax import PGXEnvironment
+from dopamax import register
 
 _NAME = "Chess"
 

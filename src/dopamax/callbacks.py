@@ -4,8 +4,8 @@ from copy import copy
 import jax
 from wandb.sdk.wandb_run import Run
 
-from src.dopamax.agents import TrainState
-from src.dopamax.typing import Metrics
+from dopamax.agents import TrainState
+from dopamax.typing import Metrics
 
 
 class Callback(ABC):

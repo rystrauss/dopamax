@@ -14,9 +14,9 @@ from flashbax.buffers.trajectory_buffer import TrajectoryBuffer, BufferState
 from ml_collections import ConfigDict
 from tqdm import tqdm
 
-from src.dopamax.agents import Agent, TrainState, _EPISODE_BUFFER_SIZE
-from src.dopamax import TimeStep, EnvState
-from src.dopamax import SampleBatch
+from dopamax.agents import Agent, TrainState, _EPISODE_BUFFER_SIZE
+from dopamax import TimeStep, EnvState
+from dopamax import SampleBatch
 
 
 @dataclass(frozen=True)

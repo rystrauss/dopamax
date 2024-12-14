@@ -6,9 +6,9 @@ import jax
 import jax.numpy as jnp
 from chex import Array
 
-from src.dopamax import Transformed
-from src.dopamax.spaces import Space, Discrete, Box
-from src.dopamax.typing import Observation, Action
+from dopamax import Transformed
+from dopamax.spaces import Space, Discrete, Box
+from dopamax.typing import Observation, Action
 
 _registry = {}
 

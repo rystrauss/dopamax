@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from chex import Array
 
-from src.dopamax.agents import AnakinAgent
+from dopamax.agents import AnakinAgent
 
 
 def explained_variance(targets: Array, preds: Array, num_envs_per_device: int, num_devices: int) -> Array:

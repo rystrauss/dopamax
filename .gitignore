@@ -7,3 +7,4 @@ artifacts
 build
 dopamax.egg-info
 .ipynb_checkpoints
+.DS_Store

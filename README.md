@@ -66,7 +66,7 @@ with `wandb login`.
 
 Agent's can be trained using the `dopamax train` command, to which you must provide a configuration file. The
 configuration file is a YAML file that specifies the agent, environment, and training hyperparameters. You can find
-examples in the [configs](configs) directory. For example, to train a PPO agent on the CartPole environment, you would
+examples in the [examples](examples) directory. For example, to train a PPO agent on the CartPole environment, you would
 run:
 
 ```bash

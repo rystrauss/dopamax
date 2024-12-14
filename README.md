@@ -21,13 +21,13 @@ because the entire loop of environment simulation, agent interaction, and policy
 XLA program and executed on CPUs, GPUs, or TPUs. More specifically, the implementations in Dopamax follow the
 Anakin Podracer architecture -- see [this paper][2] for more details.
 
-> [!WARNING] 
-> Note that this repository is not actively maintained and is subject to breaking changes at any time.
-
 ## Supported Algorithms
 
 - [Proximal Policy Optimization (PPO)](dopamax/agents/anakin/ppo.py)
 - [Deep Q-Network (DQN)](dopamax/agents/anakin/dqn.py)
+- [Deep Deterministic Policy Gradients (DDPG)](dopamax/agents/anakin/ddpg.py)
+- [Twin Delayed DDPG (TD3)](dopamax/agents/anakin/ddpg.py)
+- [Soft Actor Critic](dopamax/agents/anakin/sac.py)
 - [AlphaZero](dopamax/agents/anakin/alphazero.py)
 
 ## Installation

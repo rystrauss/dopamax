@@ -34,6 +34,9 @@ _DEFAULT_DDPG_CONFIG = ConfigDict(
         "batch_size": 256,
         "prioritized_replay": False,
         "prioritized_replay_alpha": 0.6,
+        "initial_prioritized_replay_beta": 0.4,
+        "final_prioritized_replay_beta": 1.0,
+        "prioritized_replay_beta_decay_steps": 1,
         "initial_noise_scale": 0.1,
         "final_noise_scale": 0.1,
         "noise_scale_steps": 1,
@@ -141,12 +144,21 @@ class DDPG(AnakinAgent):
                 priority_exponent=self.config.prioritized_replay_alpha,
                 device=jax.default_backend(),
             )
+
+            self._beta_schedule = optax.linear_schedule(
+                self.config.initial_prioritized_replay_beta,
+                self.config.final_prioritized_replay_beta,
+                self.config.prioritized_replay_beta_decay_steps,
+            )
         else:
             self._buffer = fbx.make_item_buffer(
                 max_length=self.config.buffer_size,
                 min_length=self.config.batch_size,
                 sample_batch_size=self.config.batch_size,
             )
+
+            self._beta_schedule = lambda _: 1.0
+
         self._buffer_initial_state = self._buffer.init(rollout_data)
 
     @staticmethod
@@ -351,7 +363,7 @@ class DDPG(AnakinAgent):
         priorities = batch.priorities if self.config.prioritized_replay else 1.0
 
         importance_weights = 1.0 / priorities
-        importance_weights **= self.config.prioritized_replay_beta
+        importance_weights **= self._beta_schedule(train_state.train_step)
         importance_weights /= jnp.max(importance_weights)
 
         sample = jax.tree_map(lambda x: jnp.squeeze(x, 1), sample)

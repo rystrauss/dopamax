@@ -45,6 +45,9 @@ _DEFAULT_DQN_CONFIG = ConfigDict(
         "network": "mlp",
         # The configuration dictionary for the network.
         "network_config": {"hidden_units": [64, 64]},
+        # Additional fully-connected layers to add after the base network before the output layer. At least one layer
+        # must be added when using the dueling architecture.
+        "final_hidden_units": (),
         # Whether to use double q-learning.
         "double": True,
         # Whether to use a dueling q-network architecture.
@@ -53,11 +56,12 @@ _DEFAULT_DQN_CONFIG = ConfigDict(
         "prioritized_replay": False,
         # The alpha parameter used for prioritized experience replay.
         "prioritized_replay_alpha": 0.6,
-        # The beta parameter used for prioritized experience replay.
-        "prioritized_replay_beta": 0.4,
-        # Additional fully-connected layers to add after the base network before the output layer. At least one layer
-        # must be added when using the dueling architecture.
-        "final_hidden_units": (),
+        # The initial beta parameter used for prioritized experience replay.
+        "initial_prioritized_replay_beta": 0.4,
+        # The final beta parameter used for prioritized experience replay.
+        "final_prioritized_replay_beta": 1.0,
+        # The number of steps over which to decay the beta parameter used for prioritized experience replay.
+        "prioritized_replay_beta_decay_steps": 1,
     }
 )
 
@@ -127,12 +131,20 @@ class DQN(AnakinAgent):
                 priority_exponent=self.config.prioritized_replay_alpha,
                 device=jax.default_backend(),
             )
+
+            self._beta_schedule = optax.linear_schedule(
+                self.config.initial_prioritized_replay_beta,
+                self.config.final_prioritized_replay_beta,
+                self.config.prioritized_replay_beta_decay_steps,
+            )
         else:
             self._buffer = fbx.make_item_buffer(
                 max_length=self.config.buffer_size,
                 min_length=self.config.batch_size,
                 sample_batch_size=self.config.batch_size,
             )
+
+            self._beta_schedule = lambda _: 1.0
         self._buffer_initial_state = self._buffer.init(rollout_data)
 
     @staticmethod
@@ -244,7 +256,7 @@ class DQN(AnakinAgent):
         priorities = batch.priorities if self.config.prioritized_replay else 1.0
 
         importance_weights = 1.0 / priorities
-        importance_weights **= self.config.prioritized_replay_beta
+        importance_weights **= self._beta_schedule(train_state.train_step)
         importance_weights /= jnp.max(importance_weights)
 
         sample = jax.tree.map(lambda x: jnp.squeeze(x, 1), sample)

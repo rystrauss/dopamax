@@ -23,12 +23,12 @@ Anakin Podracer architecture -- see [this paper][2] for more details.
 
 ## Supported Algorithms
 
-- [Proximal Policy Optimization (PPO)](dopamax/agents/anakin/ppo.py)
-- [Deep Q-Network (DQN)](dopamax/agents/anakin/dqn.py)
-- [Deep Deterministic Policy Gradients (DDPG)](dopamax/agents/anakin/ddpg.py)
-- [Twin Delayed DDPG (TD3)](dopamax/agents/anakin/ddpg.py)
-- [Soft Actor Critic](dopamax/agents/anakin/sac.py)
-- [AlphaZero](dopamax/agents/anakin/alphazero.py)
+- [Proximal Policy Optimization (PPO)](src/dopamax/agents/anakin/ppo.py)
+- [Deep Q-Network (DQN)](src/dopamax/agents/anakin/dqn.py)
+- [Deep Deterministic Policy Gradients (DDPG)](src/dopamax/agents/anakin/ddpg.py)
+- [Twin Delayed DDPG (TD3)](src/dopamax/agents/anakin/ddpg.py)
+- [Soft Actor Critic](src/dopamax/agents/anakin/sac.py)
+- [AlphaZero](src/dopamax/agents/anakin/alphazero.py)
 
 ## Installation
 

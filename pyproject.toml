@@ -1,3 +1,56 @@
 [build-system]
 requires = ["setuptools >= 64"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "dopamax"
+version = "0.2.1"
+description = "Reinforcement learning in pure JAX."
+readme = "README.md"
+license = { file = "LICENSE" }
+
+requires-python = ">= 3.10"
+
+dependencies = [
+    "jax==0.4.35",
+    "jaxlib==0.4.35",
+    "chex>=0.1.87",
+    "brax>=0.11.0",
+    "click>=8.1.7",
+    "distrax>=0.1.5",
+    "dm-env>=1.6",
+    "dm-haiku>=0.0.13",
+    "pgx>=2.4.2",
+    "einops>=0.8.0",
+    "ffmpeg>=1.4",
+    "imageio>=2.25.1",
+    "mctx>=0.0.5",
+    "moviepy>=1.0.3",
+    "ml-collections>=0.1.1",
+    "optax>=0.2.4",
+    "pygame>=2.6.1",
+    "numpy>=1.22.4",
+    "rlax>=0.1.6",
+    "tqdm>=4.64.1",
+    "wandb>=0.18.7",
+    "flashbax>=0.1.2",
+]
+
+authors = [
+    { name = "Ryan Strauss", email = "ryanrstrauss@icloud.com" },
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.scripts]
+dopamax = "dopamax._scripts.cli:cli"
+
+[project.urls]
+Repository = "https://github.com/rystrauss/dopamax.git"

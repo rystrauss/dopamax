@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 from chex import Array
 
-from dopamax import Transformed
+from dopamax.distributions import Transformed
 from dopamax.spaces import Space, Discrete, Box
 from dopamax.typing import Observation, Action
 

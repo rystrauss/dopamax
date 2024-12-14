@@ -1,8 +1,8 @@
 import pgx
 from chex import dataclass
 
-from dopamax import PGXEnvironment
-from dopamax import register
+from dopamax.environments.pgx.base import PGXEnvironment
+from dopamax.environments.utils import register
 
 _NAME = "ConnectFour"
 

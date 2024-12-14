@@ -10,12 +10,12 @@ import rlax
 from chex import PRNGKey, ArrayTree
 from ml_collections import ConfigDict
 
-from dopamax.agents import AnakinAgent, AnakinTrainState
+from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainState
 from dopamax.agents.anakin.utils import explained_variance
 from dopamax.agents.utils import register
-from dopamax import Environment
-from dopamax import get_actor_critic_model_fn, get_network_build_fn
-from dopamax import rollout_truncated, SampleBatch, create_minibatches
+from dopamax.environments.environment import Environment
+from dopamax.networks import get_network_build_fn, get_actor_critic_model_fn
+from dopamax.rollouts import SampleBatch, rollout_truncated, create_minibatches
 from dopamax.typing import Metrics, Observation, Action
 from dopamax.utils import expand_apply
 

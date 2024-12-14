@@ -7,8 +7,8 @@ import numpy as np
 from chex import dataclass, PRNGKey
 from dm_env import StepType
 
-from dopamax import EnvState, Environment, TimeStep
-from dopamax import register
+from dopamax.environments.environment import EnvState, Environment, TimeStep
+from dopamax.environments.utils import register
 from dopamax.spaces import Space, Discrete, Box
 from dopamax.typing import Observation, Action
 

@@ -6,7 +6,7 @@ from chex import dataclass, PRNGKey
 from flashbax.buffers.trajectory_buffer import BufferState
 from ml_collections import ConfigDict
 
-from dopamax import Environment
+from dopamax.environments.environment import Environment
 from dopamax.spaces import Space
 from dopamax.typing import Observation, Action, Metrics
 

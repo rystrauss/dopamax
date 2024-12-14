@@ -7,7 +7,7 @@ import pgx
 from chex import dataclass, PRNGKey
 from dm_env import StepType
 
-from dopamax import Environment, EnvState, TimeStep
+from dopamax.environments.environment import EnvState, Environment, TimeStep
 from dopamax.spaces import Box, Space, Discrete, Dict
 from dopamax.typing import Action
 

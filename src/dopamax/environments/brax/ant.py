@@ -2,8 +2,8 @@ import jax.numpy as jnp
 from brax import envs as brax_envs
 from chex import dataclass
 
-from dopamax import BraxEnvironment
-from dopamax import register
+from dopamax.agents.utils import register
+from dopamax.environments.brax.base import BraxEnvironment
 from dopamax.spaces import Space, Box
 
 _NAME = "Ant"

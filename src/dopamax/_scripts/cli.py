@@ -18,8 +18,8 @@ from tqdm import tqdm
 
 from dopamax.agents.utils import get_agent_cls
 from dopamax.callbacks import WandbCallback
-from dopamax import make_env
-from dopamax import rollout_episode, SampleBatch
+from dopamax.environments import make_env
+from dopamax.rollouts import rollout_episode, SampleBatch
 from dopamax.typing import Observation
 
 
@@ -160,7 +160,7 @@ def list_agents():
 @cli.command(short_help="Lists all available environments.")
 def list_environments():
     """Lists all available environments."""
-    from dopamax import _registry
+    from dopamax.agents.utils import _registry
 
     print("Available environments:")
     for agent_name in sorted(_registry.keys()):

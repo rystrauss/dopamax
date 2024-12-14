@@ -11,12 +11,12 @@ from chex import PRNGKey, Array, ArrayTree
 from mctx._src.base import RecurrentState, RecurrentFnOutput
 from ml_collections import ConfigDict
 
-from dopamax.agents import AnakinAgent, AnakinTrainState, AnakinTrainStateWithReplayBuffer
+from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainState, AnakinTrainStateWithReplayBuffer
 from dopamax.agents.utils import register
-from dopamax import Environment, EnvState
-from dopamax import PGXEnvironment
-from dopamax import get_network_build_fn, get_actor_critic_model_fn
-from dopamax import SampleBatch, rollout_truncated
+from dopamax.environments.environment import Environment, EnvState
+from dopamax.environments.pgx.base import PGXEnvironment
+from dopamax.networks import get_network_build_fn, get_actor_critic_model_fn
+from dopamax.rollouts import SampleBatch, rollout_truncated
 from dopamax.typing import Metrics, Observation, Action
 
 _DEFAULT_ALPHAZERO_CONFIG = ConfigDict(

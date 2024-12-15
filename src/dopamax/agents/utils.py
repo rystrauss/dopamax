@@ -1,7 +1,5 @@
 from typing import Type
 
-from dopamax.agents.base import Agent
-
 _registry = {}
 
 
@@ -15,7 +13,7 @@ def register(name: str):
     return _fn
 
 
-def get_agent_cls(agent_name: str) -> Type[Agent]:
+def get_agent_cls(agent_name: str) -> Type["Agent"]:
     """Get an agent class by name
 
     Args:

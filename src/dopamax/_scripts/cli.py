@@ -71,7 +71,9 @@ def train(config, offline):
         with open(params_path, "wb") as f:
             pickle.dump(params, f)
 
-        params_artifact = wandb.Artifact(config.env_name + "-" + config.agent_name + "-agent", type="agent")
+        params_artifact = wandb.Artifact(
+            config.env_name.replace(":", "-") + "-" + config.agent_name + "-agent", type="agent"
+        )
         params_artifact.add_file(params_path)
         run.log_artifact(params_artifact)
 

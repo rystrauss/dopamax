@@ -1,4 +1,5 @@
 from dopamax.environments.environment import Environment
+from dopamax.environments.gymnax import GymnaxEnvironment
 
 _registry = {}
 
@@ -23,5 +24,14 @@ def make_env(env_name: str, **kwargs) -> Environment:
     Returns:
         The environment.
     """
+    if env_name.startswith("gymnax:"):
+        try:
+            import gymnax
+        except ImportError:
+            raise ImportError("Unable to import gymnax. Please install gymnax (e.g. via 'pip install gymnax').")
+
+        env, env_params = gymnax.make(env_name[7:], **kwargs)
+        return GymnaxEnvironment(env=env, env_params=env_params)
+
     env_cls = _registry[env_name]
     return env_cls(**kwargs)

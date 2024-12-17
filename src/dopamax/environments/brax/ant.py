@@ -6,7 +6,7 @@ from dopamax.agents.utils import register
 from dopamax.environments.brax.base import BraxEnvironment
 from dopamax.spaces import Space, Box
 
-_NAME = "Ant"
+_NAME = "brax:Ant"
 
 
 @register(_NAME)

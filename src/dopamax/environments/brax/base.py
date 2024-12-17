@@ -23,7 +23,7 @@ class BraxEnvState(EnvState):
 
 @dataclass(frozen=True)
 class BraxEnvironment(Environment, ABC):
-    _brax_env: brax_envs.Env
+    _brax_env: brax_envs.PipelineEnv
 
     @property
     def renderable(self) -> bool:
@@ -35,7 +35,7 @@ class BraxEnvironment(Environment, ABC):
 
     @property
     def render_shape(self) -> Optional[Tuple[int, int, int]]:
-        return 300, 450, 3
+        return 240, 320, 3
 
     def reset(self, key: PRNGKey) -> Tuple[TimeStep, BraxEnvState]:
         brax_state = self._brax_env.reset(key)

@@ -6,7 +6,7 @@ from dopamax.environments.brax.base import BraxEnvironment
 from dopamax.environments.utils import register
 from dopamax.spaces import Space, Box
 
-_NAME = "InvertedPendulum"
+_NAME = "brax:InvertedPendulum"
 
 
 @register(_NAME)

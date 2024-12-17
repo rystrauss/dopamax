@@ -1,4 +1,4 @@
-env_name: "CartPole"
+env_name: "gymnax:CartPole"
 agent_name: "DQN"
 train_iterations: 300000
 callback_freq: 1000

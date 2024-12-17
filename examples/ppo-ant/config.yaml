@@ -1,14 +1,14 @@
-env_name: "Ant"
+env_name: "brax:Ant"
 agent_name: "PPO"
 train_iterations: 5000
 callback_freq: 10
 # Comment out the seed if you want each run to be different.
 seed: 25987700
 agent_config:
-  rollout_fragment_length: 8
+  rollout_fragment_length: 32
   minibatch_size: 8
   num_devices: 8
-  num_envs_per_device: 128
+  num_envs_per_device: 32
   gamma: 0.97
   lambda_: 0.95
   clip: 0.3

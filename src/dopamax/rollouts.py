@@ -4,7 +4,6 @@ import chex
 import einops
 import haiku as hk
 import jax
-import jax.numpy as jnp
 from chex import PRNGKey, ArrayTree
 from dm_env import StepType
 
@@ -29,6 +28,7 @@ class SampleBatch(dict):
     EPISODE_REWARD = "episode_reward"
     EPISODE_LENGTH = "episode_length"
     RENDER = "render"
+    ENVIRONMENT_STATE = "environment_state"
 
 
 # Type definition for a policy function that can be used in a rollout.
@@ -43,7 +43,7 @@ def rollout_episode(
     policy_fn: PolicyFn,
     policy_params: hk.Params,
     key: PRNGKey,
-    render: bool = False,
+    return_env_states: bool = False,
     pass_env_state_to_policy: bool = False,
     **policy_fn_kwargs,
 ) -> SampleBatch:
@@ -55,28 +55,17 @@ def rollout_episode(
             and returns an action.
         policy_params: The policy parameters to feed into the policy function.
         key: A PRNG key.
-        render: Whether to include environment renders in the rollout.
+        return_env_states: Whether to include environment states in the rollout.
         pass_env_state_to_policy: Whether to pass the environment state to the policy function.
 
     Returns:
         A dictionary containing trajectory data from the rollout.
     """
 
-    if render:
-        assert env.renderable, "Environment cannot be rendered."
-
     def transition_fn(carry, _):
         key, time_step, env_state, valid_mask = carry
 
         key, step_key, reset_env_key, policy_key = jax.random.split(key, 4)
-
-        if render:
-            frame = jax.pure_callback(
-                env.render,
-                jax.ShapeDtypeStruct(env.render_shape, jnp.uint8),
-                env_state,
-                vmap_method="sequential",
-            )
 
         if pass_env_state_to_policy:
             policy_fn_kwargs["env_state"] = env_state
@@ -101,8 +90,8 @@ def rollout_episode(
             **policy_info,
         }
 
-        if render:
-            data[SampleBatch.RENDER] = frame
+        if return_env_states:
+            data[SampleBatch.ENVIRONMENT_STATE] = env_state
 
         return (key, next_time_step, next_env_state, next_valid_mask), data
 

@@ -116,13 +116,14 @@ def evaluate(agent_artifact, num_episodes, render):
     rewards, lengths, renders = [], [], []
 
     for _ in tqdm(range(num_episodes), unit="episodes"):
-        rollout_data = rollout_fn(env, policy_fn, params, prng.next(), render)
+        rollout_data = rollout_fn(env, policy_fn, params, prng.next(), return_env_states=render)
         rewards.append(rollout_data[SampleBatch.EPISODE_REWARD][-1])
         lengths.append(rollout_data[SampleBatch.EPISODE_LENGTH][-1])
 
         if render:
             last_index = np.argwhere(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)[0][0]
-            renders.append(rollout_data[SampleBatch.RENDER][: last_index + 1])
+            env_states = jax.tree.map(lambda x: x[: last_index + 1], rollout_data[SampleBatch.ENVIRONMENT_STATE])
+            renders.append(env.render(env_states))
 
     to_log = {
         "mean_reward": np.mean(rewards),

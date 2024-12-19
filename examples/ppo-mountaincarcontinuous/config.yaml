@@ -1,4 +1,4 @@
-env_name: "gymnax:MountainCarContinuous"
+env_name: "gymnax:MountainCarContinuous-v0"
 agent_name: "PPO"
 train_iterations: 2000
 # Comment out the seed if you want each run to be different.

@@ -1,6 +1,6 @@
 from abc import abstractmethod, ABC
 from dataclasses import field
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, Iterable
 
 import jax.numpy as jnp
 import numpy as np
@@ -201,13 +201,13 @@ class Environment(ABC):
         """
         pass
 
-    def render(self, state: EnvState) -> np.ndarray:
+    def render(self, states: Iterable[EnvState]) -> np.ndarray:
         """Renders the current state of the environment as an RGB frame.
 
         Args:
-            state: A `EnvState` representing the current state of the environment.
+            states: A list or array of `EnvState` representing the trajectory of the environment.
 
         Returns:
-            An RGB frame of the current state of the environment.
+            The RGB frames of the trajectory.
         """
         raise NotImplementedError("This environment does not support rendering.")

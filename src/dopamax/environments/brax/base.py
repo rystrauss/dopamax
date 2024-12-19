@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Iterable
 
 import jax
 import jax.numpy as jnp
@@ -78,6 +78,7 @@ class BraxEnvironment(Environment, ABC):
 
         return time_step, state
 
-    def render(self, state: BraxEnvState) -> np.ndarray:
+    def render(self, states: Iterable[BraxEnvState]) -> np.ndarray:
         height, width, _ = self.render_shape
-        return image.render_array(self._brax_env.sys, state.brax_state.pipeline_state, height, width)
+        trajectory = [s.brax_state.pipeline_state for s in states]
+        return image.render_array(self._brax_env.sys, trajectory, height, width)

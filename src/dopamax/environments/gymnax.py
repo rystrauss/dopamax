@@ -5,6 +5,7 @@ import jax
 from chex import PRNGKey, dataclass
 from dm_env import StepType
 from gymnax.environments.spaces import Space
+
 from dopamax import spaces
 from dopamax.environments.environment import Environment, EnvState, TimeStep
 from dopamax.typing import Action

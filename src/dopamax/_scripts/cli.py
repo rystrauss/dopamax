@@ -19,6 +19,7 @@ from tqdm import tqdm
 from dopamax.agents.utils import get_agent_cls
 from dopamax.callbacks import WandbCallback
 from dopamax.environments import make_env
+from dopamax.environments.visualization import render_trajectory
 from dopamax.rollouts import rollout_episode, SampleBatch
 from dopamax.typing import Observation
 
@@ -123,7 +124,7 @@ def evaluate(agent_artifact, num_episodes, render):
         if render:
             last_index = np.argwhere(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)[0][0]
             env_states = jax.tree.map(lambda x: x[: last_index + 1], rollout_data[SampleBatch.ENVIRONMENT_STATE])
-            renders.append(env.render(env_states))
+            renders.append(render_trajectory(env, env_states))
 
     to_log = {
         "mean_reward": np.mean(rewards),
@@ -135,9 +136,7 @@ def evaluate(agent_artifact, num_episodes, render):
     }
 
     if render:
-        to_log["renders"] = [
-            wandb.Video(einops.rearrange(np.array(data), "t h w c -> t c h w"), fps=env.fps) for data in renders
-        ]
+        to_log["renders"] = [wandb.Video(data, format=format) for data, format in renders]
 
     run.log(to_log)
 

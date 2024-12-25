@@ -1,11 +1,9 @@
 from abc import ABC
-from typing import Tuple, Optional, Iterable
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 from brax import envs as brax_envs
-from brax.io import image
 from chex import dataclass, PRNGKey
 from dm_env import StepType
 
@@ -24,18 +22,6 @@ class BraxEnvState(EnvState):
 @dataclass(frozen=True)
 class BraxEnvironment(Environment, ABC):
     _brax_env: brax_envs.PipelineEnv
-
-    @property
-    def renderable(self) -> bool:
-        return True
-
-    @property
-    def fps(self) -> Optional[int]:
-        return 1 // self._brax_env.dt
-
-    @property
-    def render_shape(self) -> Optional[Tuple[int, int, int]]:
-        return 240, 320, 3
 
     def reset(self, key: PRNGKey) -> Tuple[TimeStep, BraxEnvState]:
         brax_state = self._brax_env.reset(key)
@@ -77,8 +63,3 @@ class BraxEnvironment(Environment, ABC):
         )
 
         return time_step, state
-
-    def render(self, states: Iterable[BraxEnvState]) -> np.ndarray:
-        height, width, _ = self.render_shape
-        trajectory = [s.brax_state.pipeline_state for s in states]
-        return image.render_array(self._brax_env.sys, trajectory, height, width)

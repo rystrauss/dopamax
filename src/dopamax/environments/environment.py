@@ -1,9 +1,8 @@
 from abc import abstractmethod, ABC
 from dataclasses import field
-from typing import Dict, Any, Tuple, Optional, Iterable
+from typing import Dict, Any, Tuple, Optional
 
 import jax.numpy as jnp
-import numpy as np
 from chex import PRNGKey, dataclass
 from dm_env import StepType
 
@@ -160,21 +159,6 @@ class Environment(ABC):
         """The action space of the environment."""
         pass
 
-    @property
-    def renderable(self) -> bool:
-        """Whether the environment can be rendered."""
-        return False
-
-    @property
-    def fps(self) -> Optional[int]:
-        """The frames per second of rendered frames."""
-        return None
-
-    @property
-    def render_shape(self) -> Optional[Tuple[int, int, int]]:
-        """The shape of rendered frames."""
-        return None
-
     @abstractmethod
     def reset(self, key: PRNGKey) -> Tuple[TimeStep, EnvState]:
         """Resets the environment to the start of a new episode.
@@ -200,14 +184,3 @@ class Environment(ABC):
             A tuple containing the time step and the next environment state.
         """
         pass
-
-    def render(self, states: Iterable[EnvState]) -> np.ndarray:
-        """Renders the current state of the environment as an RGB frame.
-
-        Args:
-            states: A list or array of `EnvState` representing the trajectory of the environment.
-
-        Returns:
-            The RGB frames of the trajectory.
-        """
-        raise NotImplementedError("This environment does not support rendering.")

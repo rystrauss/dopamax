@@ -44,7 +44,6 @@ jobs:
         python -m pip install "moviepy>=1.0.3"
         python -m pip install "ml-collections>=0.1.1"
         python -m pip install "optax>=0.2.4"
-        python -m pip install "pygame>=2.6.1"
         python -m pip install "numpy>=1.22.4"
         python -m pip install "rlax>=0.1.6"
         python -m pip install "tqdm>=4.64.1"

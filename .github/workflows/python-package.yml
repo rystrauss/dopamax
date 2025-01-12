@@ -49,6 +49,7 @@ jobs:
         python -m pip install "tqdm>=4.64.1"
         python -m pip install "wandb>=0.18.7"
         python -m pip install "flashbax>=0.1.2"
+        python -m pip install "gymnax>=0.0.8"
         python -m pip install "gymnasium==1.0.0"
         python -m pip install .
     - name: Lint with flake8

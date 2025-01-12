@@ -256,8 +256,11 @@ class SAC(AnakinAgent):
             next_logpacs = jax.nn.log_softmax(next_pi.logits)
             q_targets = jnp.minimum(*self._critic.apply(target_critic_params, target_critic_key, next_obs))
             q_targets = jnp.sum(jnp.exp(next_logpacs) * (q_targets - alpha * next_logpacs), axis=-1)
-            backup = jnp.expand_dims(rewards + self.config.gamma * discounts * q_targets, axis=1)
+            backup = rewards + self.config.gamma * discounts * q_targets
+
             q1_values, q2_values = self._critic.apply(online_critic_params, critic_key, obs)
+            q1_values = jnp.take_along_axis(q1_values, jnp.expand_dims(actions, axis=-1), axis=-1).squeeze(-1)
+            q2_values = jnp.take_along_axis(q2_values, jnp.expand_dims(actions, axis=-1), axis=-1).squeeze(-1)
         else:
             next_actions, next_logpacs = next_pi.sample_and_log_prob(seed=sample_key)
             q_targets = jnp.minimum(

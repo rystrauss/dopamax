@@ -1,0 +1,19 @@
+env_name: "gymnax:CartPole-v1"
+agent_name: "SAC"
+train_iterations: 120000
+callback_freq: 5000
+# Comment out the seed if you want each run to be different.
+seed: 3511742828
+agent_config:
+  batch_size: 256
+  gamma: 0.98
+  actor_learning_rate: 0.0003
+  critic_learning_rate: 0.0003
+  entropy_learning_rate: 0.0001
+  buffer_size: 100000
+  tau: 0.005
+  initial_alpha: 0.5
+  target_update_interval: 2
+  learning_starts: 10000
+  network_config:
+    hidden_units: [ 64, 64 ]

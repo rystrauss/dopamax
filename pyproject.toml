@@ -55,6 +55,6 @@ dopamax = "dopamax._scripts.cli:cli"
 [project.urls]
 Repository = "https://github.com/rystrauss/dopamax.git"
 
-[tool.black]
+[tool.ruff]
 line-length = 120
 target-version = ["py310", "py311", "py312"]

@@ -8,3 +8,6 @@ build
 dopamax.egg-info
 .ipynb_checkpoints
 .DS_Store
+uv.lock
+.venv
+dist

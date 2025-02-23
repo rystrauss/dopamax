@@ -38,7 +38,13 @@ def cli():
     help="Path to the training config YAML file.",
 )
 @click.option("--offline", is_flag=True, help="Run in offline mode, without logging to W&B.")
-def train(config, offline):
+@click.option(
+    "--profiler_port",
+    type=click.INT,
+    default=None,
+    help="The port number on which to run a JAX profiler server during training.",
+)
+def train(config, offline, profiler_port):
     """Trains an agent using the provided config file, and logs results to W&B."""
     with open(config, "r") as f:
         config = ConfigDict(yaml.safe_load(f))
@@ -59,12 +65,18 @@ def train(config, offline):
 
     key = jax.random.PRNGKey(config.seed)
 
+    if profiler_port is not None:
+        jax.profiler.start_server(profiler_port)
+
     params = agent.train(
         key,
         config.train_iterations,
         callback_freq=config.get("callback_freq", 100),
         callbacks=[WandbCallback(run)],
     )
+
+    if profiler_port is not None:
+        jax.profiler.stop_server()
 
     if not offline:
         params_path = os.path.join(run.dir, "params.pkl")

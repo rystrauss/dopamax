@@ -56,6 +56,7 @@ target-version = ["py310", "py311", "py312"]
 
 [dependency-groups]
 dev = [
+    "pytest>=8.3.4",
     "tensorboard-plugin-profile>=2.19.0",
     "tensorflow>=2.18.0",
 ]

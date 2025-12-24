@@ -1,14 +1,14 @@
 env_name: "gymnax:CartPole-v1"
 agent_name: "DQN"
-train_iterations: 300000
+train_iterations: 500000
 callback_freq: 1000
 # Comment out the seed if you want each run to be different.
-seed: 3105622642
+seed: 1285325205
 agent_config:
   num_devices: 1
   num_envs_per_device: 1
   gamma: 0.99
   epsilon_decay_steps: 50000
-  target_update_freq: 1000
+  target_update_freq: 2000
   network_config:
     hidden_units: [ 32, 32 ]

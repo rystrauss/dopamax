@@ -56,6 +56,10 @@ _DEFAULT_PPO_CONFIG = ConfigDict(
         "value_network": "copy",
         # Whether to use a floating scale for Gaussian policies.
         "free_log_std": True,
+        # Whether to normalize advantages. This can improve training stability.
+        "normalize_advantages": True,
+        # Whether to normalize value targets. This can improve training stability.
+        "normalize_values": False,
     }
 )
 
@@ -241,6 +245,20 @@ class PPO(AnakinAgent):
             self.config.lambda_,
             values,
         )
+
+        # Normalize advantages if configured
+        if self.config.normalize_advantages:
+            advantages = rollout_data[SampleBatch.ADVANTAGE]
+            advantages_mean = jnp.mean(advantages)
+            advantages_std = jnp.std(advantages) + 1e-8
+            rollout_data[SampleBatch.ADVANTAGE] = (advantages - advantages_mean) / advantages_std
+
+        # Normalize value targets if configured
+        if self.config.normalize_values:
+            returns = rollout_data[SampleBatch.RETURN]
+            returns_mean = jnp.mean(returns)
+            returns_std = jnp.std(returns) + 1e-8
+            rollout_data[SampleBatch.RETURN] = (returns - returns_mean) / returns_std
 
         def update_scan_fn(carry, minibatch):
             params, opt_state, key = carry

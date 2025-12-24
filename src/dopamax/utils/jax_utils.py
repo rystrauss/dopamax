@@ -1,3 +1,5 @@
+"""JAX-specific utility functions."""
+
 import functools
 
 import jax
@@ -26,7 +28,6 @@ def expand_apply(f):
     Returns:
       f, wrapped as described above.
     """
-
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         def expand(t):
@@ -44,3 +45,4 @@ def expand_apply(f):
         )
 
     return wrapper
+

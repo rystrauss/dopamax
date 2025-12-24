@@ -1,6 +1,5 @@
 """Utilities for normalizing observations and rewards."""
 
-import jax
 import jax.numpy as jnp
 from chex import Array
 

@@ -56,9 +56,11 @@ _DEFAULT_PPO_CONFIG = ConfigDict(
         "value_network": "copy",
         # Whether to use a floating scale for Gaussian policies.
         "free_log_std": True,
-        # Whether to normalize advantages. This can improve training stability.
-        "normalize_advantages": True,
-        # Whether to normalize value targets. This can improve training stability.
+        # Whether to normalize advantages. This can improve training stability, but changes the effective
+        # learning rate. Default is False for backward compatibility.
+        "normalize_advantages": False,
+        # Whether to normalize value targets. This can improve training stability, but changes the effective
+        # learning rate. Default is False for backward compatibility.
         "normalize_values": False,
     }
 )
@@ -236,7 +238,7 @@ class PPO(AnakinAgent):
         rollout_data[SampleBatch.RETURN] = rlax.discounted_returns(
             rollout_data[SampleBatch.REWARD] * self.config.reward_scaling,
             rollout_data[SampleBatch.DISCOUNT] * self.config.gamma,
-            v_t=0.0,
+            v_t=final_value,
         )
 
         rollout_data[SampleBatch.ADVANTAGE] = rlax.truncated_generalized_advantage_estimation(

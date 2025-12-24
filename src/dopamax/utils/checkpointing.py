@@ -1,6 +1,5 @@
 """Utilities for checkpointing and resuming training."""
 
-import os
 import pickle
 from pathlib import Path
 from typing import Any

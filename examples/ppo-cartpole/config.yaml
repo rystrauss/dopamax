@@ -2,7 +2,7 @@ env_name: "gymnax:CartPole-v1"
 agent_name: "PPO"
 train_iterations: 1500
 # Comment out the seed if you want each run to be different.
-seed: 88476718
+seed: 9968351
 agent_config:
   rollout_fragment_length: 128
   minibatch_size: 32

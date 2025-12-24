@@ -1,7 +1,6 @@
 """Integration tests for full training loops."""
 
 import jax
-import jax.numpy as jnp
 import pytest
 
 from dopamax.agents.utils import get_agent_cls

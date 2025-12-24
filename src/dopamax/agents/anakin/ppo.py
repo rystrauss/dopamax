@@ -1,5 +1,4 @@
 from functools import partial
-from typing import Tuple, Dict
 
 import distrax
 import haiku as hk
@@ -7,16 +6,16 @@ import jax
 import jax.numpy as jnp
 import optax
 import rlax
-from chex import PRNGKey, ArrayTree
+from chex import ArrayTree, PRNGKey
 from ml_collections import ConfigDict
 
 from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainState
 from dopamax.agents.anakin.utils import explained_variance
 from dopamax.agents.utils import register
 from dopamax.environments.environment import Environment
-from dopamax.networks import get_network_build_fn, get_actor_critic_model_fn
-from dopamax.rollouts import SampleBatch, rollout_truncated, create_minibatches
-from dopamax.typing import Metrics, Observation, Action
+from dopamax.networks import get_actor_critic_model_fn, get_network_build_fn
+from dopamax.rollouts import SampleBatch, create_minibatches, rollout_truncated
+from dopamax.typing import Action, Metrics, Observation
 from dopamax.utils import expand_apply
 
 _DEFAULT_PPO_CONFIG = ConfigDict(
@@ -65,16 +64,39 @@ _DEFAULT_PPO_CONFIG = ConfigDict(
 class PPO(AnakinAgent):
     """Proximal Policy Optimization (PPO) agent.
 
+    This implementation follows the clipped objective version of PPO (PPO-Clip) as described in the original paper.
+    It uses Generalized Advantage Estimation (GAE) for computing advantages and supports both discrete and continuous
+    action spaces.
+
+    Key features:
+    - Clipped surrogate objective to prevent large policy updates
+    - GAE for variance reduction in advantage estimation
+    - Multiple epochs of updates on collected data
+    - Support for both shared and independent value networks
+    - Gradient clipping for training stability
+
     Args:
         env: The environment to interact with.
-        config: The configuration dictionary for the agent.
+        config: The configuration dictionary for the agent. See `default_config()` for available options.
 
     References:
+        Schulman, J., et al. (2017). "Proximal Policy Optimization Algorithms."
         https://arxiv.org/abs/1707.06347
     """
 
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
+
+        # Validate configuration
+        if self.config.rollout_fragment_length % self.config.minibatch_size != 0:
+            msg = (
+                f"rollout_fragment_length ({self.config.rollout_fragment_length}) must be divisible by "
+                f"minibatch_size ({self.config.minibatch_size})"
+            )
+            raise ValueError(msg)
+        if self.config.value_network not in ("copy", "shared"):
+            msg = f"value_network must be 'copy' or 'shared', got '{self.config.value_network}'"
+            raise ValueError(msg)
 
         network_build_fn = get_network_build_fn(self.config.network, **self.config.network_config)
         model_fn = get_actor_critic_model_fn(
@@ -85,7 +107,7 @@ class PPO(AnakinAgent):
         )
         self._model = hk.transform(model_fn)
 
-        def policy_fn(params: hk.Params, key: PRNGKey, observation: Observation) -> Tuple[Action, Dict[str, ArrayTree]]:
+        def policy_fn(params: hk.Params, key: PRNGKey, observation: Observation) -> tuple[Action, dict[str, ArrayTree]]:
             model_key, sample_key = jax.random.split(key)
 
             pi, values = expand_apply(partial(self._model.apply, params, model_key))(observation)
@@ -118,6 +140,18 @@ class PPO(AnakinAgent):
     def compute_action(
         self, params: hk.Params, key: PRNGKey, observation: Observation, deterministic: bool = True
     ) -> Action:
+        """Computes an action for the given observation.
+
+        Args:
+            params: The agent's parameters.
+            key: A PRNG key.
+            observation: The observation to compute an action for.
+            deterministic: If True, returns the mode (discrete) or mean (continuous) of the policy.
+                If False, samples from the policy distribution.
+
+        Returns:
+            The computed action.
+        """
         pi, _ = self._model.apply(params, key, observation)
 
         if deterministic:
@@ -126,7 +160,7 @@ class PPO(AnakinAgent):
 
             return pi.mean()
         else:
-            return pi.sample(key)
+            return pi.sample(seed=key)
 
     def initial_train_state(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> AnakinTrainState:
         train_state_key, env_key = jax.random.split(divergent_key)
@@ -178,7 +212,7 @@ class PPO(AnakinAgent):
 
         return new_params, new_opt_state, info
 
-    def train_step(self, train_state: AnakinTrainState) -> Tuple[AnakinTrainState, Metrics]:
+    def train_step(self, train_state: AnakinTrainState) -> tuple[AnakinTrainState, Metrics]:
         next_train_state_key, rollout_key, initial_update_key = jax.random.split(train_state.key, 3)
 
         rollout_data, _, new_time_step, new_env_state = self._rollout_fn(

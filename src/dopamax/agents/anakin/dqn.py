@@ -1,5 +1,4 @@
 from functools import partial
-from typing import Tuple, Dict
 
 import distrax
 import flashbax as fbx
@@ -8,17 +7,17 @@ import jax
 import jax.numpy as jnp
 import optax
 import rlax
-from chex import PRNGKey, ArrayTree
+from chex import ArrayTree, PRNGKey
 from ml_collections import ConfigDict
 
 from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainState, AnakinTrainStateWithReplayBuffer
 from dopamax.agents.utils import register
 from dopamax.environments.environment import Environment
-from dopamax.networks import get_network_build_fn, get_discrete_q_network_model_fn
+from dopamax.networks import get_discrete_q_network_model_fn, get_network_build_fn
 from dopamax.prioritized_item_buffer import create_prioritised_item_buffer
-from dopamax.rollouts import rollout_truncated, SampleBatch
+from dopamax.rollouts import SampleBatch, rollout_truncated
 from dopamax.spaces import Discrete
-from dopamax.typing import Metrics, Observation, Action
+from dopamax.typing import Action, Metrics, Observation
 from dopamax.utils import expand_apply
 
 _DEFAULT_DQN_CONFIG = ConfigDict(
@@ -70,21 +69,54 @@ _DEFAULT_DQN_CONFIG = ConfigDict(
 class DQN(AnakinAgent):
     """Deep Q-Network (DQN) agent.
 
-    This is a simple DQN implementation that is very close to the original paper. It doesn't have a lot of the more
-    recent bells and whistles that have been developed.
+    This implementation includes the core DQN features:
+    - Experience replay buffer for sample efficiency
+    - Target network for stable Q-learning updates
+    - Epsilon-greedy exploration with linear decay
+    - Optional double Q-learning to reduce overestimation bias
+    - Optional dueling architecture for improved value estimation
+    - Optional prioritized experience replay (PER) for better sample efficiency
+
+    The agent only supports discrete action spaces.
 
     Args:
-        env: The environment to interact with.
-        config: The configuration dictionary for the agent.
+        env: The environment to interact with. Must have a discrete action space.
+        config: The configuration dictionary for the agent. See `default_config()` for available options.
 
     References:
-        https://www.nature.com/articles/nature14236
+        Mnih, V., et al. (2015). "Human-level control through deep reinforcement learning."
+        Nature, 518(7540), 529-533. https://www.nature.com/articles/nature14236
+
+        Van Hasselt, H., et al. (2016). "Deep Reinforcement Learning with Double Q-learning."
+        https://arxiv.org/abs/1509.06461
+
+        Wang, Z., et al. (2016). "Dueling Network Architectures for Deep Reinforcement Learning."
+        https://arxiv.org/abs/1511.06581
+
+        Schaul, T., et al. (2016). "Prioritized Experience Replay."
+        https://arxiv.org/abs/1511.05952
     """
 
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
 
-        assert isinstance(self.env.action_space, Discrete), "DQN only supports discrete action spaces."
+        if not isinstance(self.env.action_space, Discrete):
+            msg = f"DQN only supports discrete action spaces, got {type(self.env.action_space).__name__}"
+            raise ValueError(msg)
+
+        # Validate configuration
+        if self.config.dueling and not self.config.final_hidden_units:
+            msg = "Dueling networks require at least one hidden layer in final_hidden_units"
+            raise ValueError(msg)
+        if self.config.epsilon_decay_steps <= 0:
+            msg = "epsilon_decay_steps must be positive"
+            raise ValueError(msg)
+        if self.config.learning_starts < 0:
+            msg = "learning_starts must be non-negative"
+            raise ValueError(msg)
+        if self.config.target_update_freq <= 0:
+            msg = "target_update_freq must be positive"
+            raise ValueError(msg)
 
         network_build_fn = get_network_build_fn(self.config.network, **self.config.network_config)
         model_fn = get_discrete_q_network_model_fn(
@@ -94,7 +126,7 @@ class DQN(AnakinAgent):
 
         def policy_fn(
             params: hk.Params, key: PRNGKey, observation: Observation, epsilon: float
-        ) -> Tuple[Action, Dict[str, ArrayTree]]:
+        ) -> tuple[Action, dict[str, ArrayTree]]:
             model_key, sample_key = jax.random.split(key)
 
             preferences = expand_apply(partial(self._model.apply, params, model_key))(observation)
@@ -160,6 +192,18 @@ class DQN(AnakinAgent):
         observation: Observation,
         deterministic: bool = True,
     ) -> Action:
+        """Computes an action for the given observation.
+
+        Args:
+            params: The agent's parameters. Should contain "online" key with the online Q-network parameters.
+            key: A PRNG key.
+            observation: The observation to compute an action for.
+            deterministic: If True, returns the action with the highest Q-value. If False, samples
+                from the softmax distribution over Q-values.
+
+        Returns:
+            The computed action.
+        """
         preferences = self._model.apply(params["online"], key, observation)
         pi = distrax.Categorical(logits=preferences)
         return pi.mode() if deterministic else pi.sample(seed=key)
@@ -236,7 +280,7 @@ class DQN(AnakinAgent):
 
     def train_step(
         self, train_state: AnakinTrainStateWithReplayBuffer
-    ) -> Tuple[AnakinTrainStateWithReplayBuffer, Metrics]:
+    ) -> tuple[AnakinTrainStateWithReplayBuffer, Metrics]:
         next_train_state_key, rollout_key, update_key, sample_key = jax.random.split(train_state.key, 4)
 
         current_epsilon = self._epsilon_schedule(train_state.train_step)

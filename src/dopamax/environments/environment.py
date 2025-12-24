@@ -1,6 +1,6 @@
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 from dataclasses import field
-from typing import Dict, Any, Tuple, Optional
+from typing import Any
 
 import jax.numpy as jnp
 from chex import PRNGKey, dataclass
@@ -32,13 +32,13 @@ class TimeStep:
     """
 
     observation: Observation
-    reward: Optional[float]
-    discount: Optional[float]
+    reward: float | None
+    discount: float | None
     step_type: StepType
-    info: Dict[str, Any] = field(default_factory=dict)
+    info: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def restart(cls, observation: Observation, info: Optional[Dict[str, Any]] = None) -> "TimeStep":
+    def restart(cls, observation: Observation, info: dict[str, Any] | None = None) -> "TimeStep":
         """Creates a time step for the first step in an episode.
 
         Note that `reward` and `discount` are set to `jnp.nan` to indicate that they are undefined for the first step
@@ -61,7 +61,7 @@ class TimeStep:
 
     @classmethod
     def transition(
-        cls, observation: Observation, reward: float, discount: float = 1.0, info: Optional[Dict[str, Any]] = None
+        cls, observation: Observation, reward: float, discount: float = 1.0, info: dict[str, Any] | None = None
     ) -> "TimeStep":
         """Creates a time step for a transition in the middle of an episode.
 
@@ -83,7 +83,7 @@ class TimeStep:
         )
 
     @classmethod
-    def termination(cls, observation: Observation, reward: float, info: Optional[Dict[str, Any]] = None) -> "TimeStep":
+    def termination(cls, observation: Observation, reward: float, info: dict[str, Any] | None = None) -> "TimeStep":
         """Creates a time step for the last step in an episode due to a terminal environment state.
 
         The discount will be set to 0.0, and the step type will be set to `StepType.LAST`.
@@ -106,7 +106,7 @@ class TimeStep:
 
     @classmethod
     def truncation(
-        cls, observation: Observation, reward: float, discount: float = 1.0, info: Optional[Dict[str, Any]] = None
+        cls, observation: Observation, reward: float, discount: float = 1.0, info: dict[str, Any] | None = None
     ) -> "TimeStep":
         """Creates a time step for the last step in an episode due to a truncation.
 
@@ -139,28 +139,24 @@ class Environment(ABC):
     @abstractmethod
     def name(self) -> str:
         """The name of the environment."""
-        pass
 
     @property
     @abstractmethod
     def max_episode_length(self) -> int:
         """The maximum number of allowed steps in an episode."""
-        pass
 
     @property
     @abstractmethod
     def observation_space(self) -> Space:
         """The observation space of the environment."""
-        pass
 
     @property
     @abstractmethod
     def action_space(self) -> Space:
         """The action space of the environment."""
-        pass
 
     @abstractmethod
-    def reset(self, key: PRNGKey) -> Tuple[TimeStep, EnvState]:
+    def reset(self, key: PRNGKey) -> tuple[TimeStep, EnvState]:
         """Resets the environment to the start of a new episode.
 
         Args:
@@ -169,10 +165,9 @@ class Environment(ABC):
         Returns:
             A tuple containing the initial time step and the initial environment state.
         """
-        pass
 
     @abstractmethod
-    def step(self, key: PRNGKey, state: EnvState, action: Action) -> Tuple[TimeStep, EnvState]:
+    def step(self, key: PRNGKey, state: EnvState, action: Action) -> tuple[TimeStep, EnvState]:
         """Steps the environment forward by one time step.
 
         Args:
@@ -183,4 +178,3 @@ class Environment(ABC):
         Returns:
             A tuple containing the time step and the next environment state.
         """
-        pass

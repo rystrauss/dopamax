@@ -29,7 +29,9 @@ def expand_apply(f):
 
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
-        expand = lambda t: jnp.expand_dims(t, axis=0)
+        def expand(t):
+            return jnp.expand_dims(t, axis=0)
+
         args = jax.tree_util.tree_map(expand, args)
         kwargs = jax.tree_util.tree_map(expand, kwargs)
         outputs = f(*args, **kwargs)

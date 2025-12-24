@@ -4,7 +4,7 @@ from collections import OrderedDict
 
 import jax
 import jax.numpy as jnp
-from chex import PRNGKey, Array, Scalar, ArrayTree
+from chex import Array, ArrayTree, PRNGKey, Scalar
 
 
 class Space(ABC):
@@ -23,9 +23,8 @@ class Space(ABC):
 
     @property
     @abstractmethod
-    def shape(self) -> typing.Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         """The shape of the space."""
-        pass
 
     @abstractmethod
     def sample(self, key: PRNGKey) -> ArrayTree:
@@ -37,7 +36,6 @@ class Space(ABC):
         Returns:
             A random element from the space.
         """
-        pass
 
     @abstractmethod
     def contains(self, item: ArrayTree) -> bool:
@@ -49,7 +47,6 @@ class Space(ABC):
         Returns:
             True if the item is contained in the space, False otherwise.
         """
-        pass
 
     def __contains__(self, item: ArrayTree) -> bool:
         return self.contains(item)
@@ -68,12 +65,14 @@ class Discrete(Space):
     def __init__(self, n: int, dtype: jnp.dtype = jnp.int32):
         super().__init__(dtype)
 
-        assert n > 0, "Discrete space must have n > 0."
+        if n <= 0:
+            msg = "Discrete space must have n > 0."
+            raise ValueError(msg)
 
         self._n = n
 
     @property
-    def shape(self) -> typing.Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return ()
 
     def sample(self, key: PRNGKey) -> ArrayTree:
@@ -105,9 +104,9 @@ class Box(Space):
 
     def __init__(
         self,
-        low: typing.Union[Array, Scalar],
-        high: typing.Union[Array, Scalar],
-        shape: typing.Optional[typing.Tuple[int, ...]] = None,
+        low: Array | Scalar,
+        high: Array | Scalar,
+        shape: tuple[int, ...] | None = None,
         dtype: jnp.dtype = jnp.float32,
     ):
         super().__init__(dtype)
@@ -121,17 +120,19 @@ class Box(Space):
         low = jnp.broadcast_to(low, shape)
         high = jnp.broadcast_to(high, shape)
 
-        assert low.shape == high.shape, "low and high must have the same shape."
+        if low.shape != high.shape:
+            msg = "low and high must have the same shape."
+            raise ValueError(msg)
 
         self._low = low.astype(dtype)
         self._high = high.astype(dtype)
 
     @property
-    def low(self) -> typing.Union[Array, Scalar]:
+    def low(self) -> Array | Scalar:
         return self._low
 
     @property
-    def high(self) -> typing.Union[Array, Scalar]:
+    def high(self) -> Array | Scalar:
         return self._high
 
     @property
@@ -143,7 +144,7 @@ class Box(Space):
         return jnp.inf > self.high
 
     @property
-    def shape(self) -> typing.Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self._low.shape
 
     def sample(self, key: PRNGKey) -> ArrayTree:
@@ -188,8 +189,8 @@ class Box(Space):
     def __eq__(self, other: typing.Any) -> bool:
         return (
             isinstance(other, Box)
-            and jnp.array_equal(self.low == other.low)
-            and jnp.array_equal(self.high == other.high)
+            and jnp.array_equal(self.low, other.low)
+            and jnp.array_equal(self.high, other.high)
         )
 
 
@@ -200,7 +201,7 @@ class Dict(Space):
         spaces: A dictionary of spaces.
     """
 
-    def __init__(self, spaces: typing.Dict[typing.Hashable, Space]):
+    def __init__(self, spaces: dict[typing.Hashable, Space]):
         dtype = jax.tree.map(lambda s: s.dtype, spaces)
         super().__init__(dtype)
 
@@ -210,7 +211,7 @@ class Dict(Space):
         return self.spaces[item]
 
     @property
-    def shape(self) -> typing.Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return jax.tree.map(lambda s: s.shape, self.spaces)
 
     def sample(self, key: PRNGKey) -> ArrayTree:

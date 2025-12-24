@@ -1,5 +1,4 @@
 from functools import partial
-from typing import Tuple, Dict
 
 import flashbax as fbx
 import haiku as hk
@@ -7,17 +6,17 @@ import jax
 import jax.numpy as jnp
 import optax
 import rlax
-from chex import PRNGKey, ArrayTree
+from chex import ArrayTree, PRNGKey
 from ml_collections import ConfigDict
 
 from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainState, AnakinTrainStateWithReplayBuffer
 from dopamax.agents.utils import register
 from dopamax.environments.environment import Environment
-from dopamax.networks import get_network_build_fn, get_deterministic_actor_model_fn, get_continuous_q_network_model_fn
+from dopamax.networks import get_continuous_q_network_model_fn, get_deterministic_actor_model_fn, get_network_build_fn
 from dopamax.prioritized_item_buffer import create_prioritised_item_buffer
-from dopamax.rollouts import rollout_truncated, SampleBatch
+from dopamax.rollouts import SampleBatch, rollout_truncated
 from dopamax.spaces import Box
-from dopamax.typing import Metrics, Observation, Action
+from dopamax.typing import Action, Metrics, Observation
 from dopamax.utils import expand_apply
 
 _DEFAULT_DDPG_CONFIG = ConfigDict(
@@ -60,18 +59,48 @@ _DEFAULT_DDPG_CONFIG = ConfigDict(
 class DDPG(AnakinAgent):
     """Deep Deterministic Policy Gradients (DDPG) agent.
 
+    DDPG is an off-policy actor-critic algorithm for continuous control. This implementation includes:
+    - Deterministic policy gradient updates
+    - Target networks with soft updates (Polyak averaging)
+    - Optional twin Q-networks (TD3-style)
+    - Optional target policy smoothing (TD3-style)
+    - Optional prioritized experience replay
+    - Action noise for exploration
+
+    The agent only supports continuous action spaces.
+
     Args:
-        env: The environment to interact with.
-        config: The configuration dictionary for the agent.
+        env: The environment to interact with. Must have a continuous (Box) action space.
+        config: The configuration dictionary for the agent. See `default_config()` for available options.
 
     References:
+        Lillicrap, T. P., et al. (2016). "Continuous control with deep reinforcement learning."
         https://arxiv.org/abs/1509.02971
+
+        Fujimoto, S., et al. (2018). "Addressing Function Approximation Error in Actor-Critic Methods."
+        https://arxiv.org/abs/1802.09477 (TD3)
     """
 
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
 
-        assert isinstance(self.env.action_space, Box), "DDPG only supports continuous action spaces."
+        if not isinstance(self.env.action_space, Box):
+            msg = f"DDPG only supports continuous (Box) action spaces, got {type(self.env.action_space).__name__}"
+            raise ValueError(msg)
+
+        # Validate configuration
+        if self.config.learning_starts < 0:
+            msg = "learning_starts must be non-negative"
+            raise ValueError(msg)
+        if self.config.random_steps < 0:
+            msg = "random_steps must be non-negative"
+            raise ValueError(msg)
+        if self.config.target_update_interval <= 0:
+            msg = "target_update_interval must be positive"
+            raise ValueError(msg)
+        if self.config.policy_delay <= 0:
+            msg = "policy_delay must be positive"
+            raise ValueError(msg)
 
         network_build_fn = get_network_build_fn(self.config.network, **self.config.network_config)
         actor_fn = get_deterministic_actor_model_fn(
@@ -94,7 +123,7 @@ class DDPG(AnakinAgent):
             observation: Observation,
             uniform_sample: bool = False,
             noise_scale: float = 0.0,
-        ) -> Tuple[Action, Dict[str, ArrayTree]]:
+        ) -> tuple[Action, dict[str, ArrayTree]]:
             model_key, sample_key = jax.random.split(key)
 
             def uniform_action():
@@ -174,8 +203,24 @@ class DDPG(AnakinAgent):
         observation: Observation,
         deterministic: bool = True,
     ) -> Action:
+        """Computes an action for the given observation.
+
+        Args:
+            params: The agent's parameters.
+            key: A PRNG key.
+            observation: The observation to compute an action for.
+            deterministic: If True, returns the deterministic policy output. If False, adds noise
+                for exploration (not yet implemented).
+
+        Returns:
+            The computed action.
+
+        Raises:
+            NotImplementedError: If deterministic=False (stochastic actions not yet implemented).
+        """
         if not deterministic:
-            raise NotImplementedError
+            msg = "Stochastic actions are not yet implemented for DDPG. Use deterministic=True."
+            raise NotImplementedError(msg)
 
         return self._actor.apply(params["online"], key, observation)
 
@@ -342,7 +387,7 @@ class DDPG(AnakinAgent):
 
     def train_step(
         self, train_state: AnakinTrainStateWithReplayBuffer
-    ) -> Tuple[AnakinTrainStateWithReplayBuffer, Metrics]:
+    ) -> tuple[AnakinTrainStateWithReplayBuffer, Metrics]:
         next_train_state_key, rollout_key, update_key, sample_key = jax.random.split(train_state.key, 4)
 
         noise_scale = self._noise_schedule(train_state.train_step)
@@ -366,7 +411,7 @@ class DDPG(AnakinAgent):
         importance_weights **= self._beta_schedule(train_state.train_step)
         importance_weights /= jnp.max(importance_weights)
 
-        sample = jax.tree_map(lambda x: jnp.squeeze(x, 1), sample)
+        sample = jax.tree.map(lambda x: jnp.squeeze(x, 1), sample)
 
         new_params, new_opt_state, metrics, td_error = self._update(
             train_state.train_step,
@@ -385,7 +430,7 @@ class DDPG(AnakinAgent):
             new_priorities = jnp.abs(td_error) + 1e-6
             new_buffer_state = self._buffer.set_priorities(new_buffer_state, batch.indices, new_priorities)
 
-        metrics = jax.tree_map(jnp.mean, metrics)
+        metrics = jax.tree.map(jnp.mean, metrics)
 
         next_train_state = train_state.update(
             new_key=next_train_state_key,
@@ -409,7 +454,7 @@ class DDPG(AnakinAgent):
             maybe_all_reduce_fn=self._maybe_all_reduce,
         )
 
-        next_train_state = jax.tree_map(
+        next_train_state = jax.tree.map(
             lambda a, b: jax.lax.select(jnp.any(train_state.train_step > self.config.learning_starts), a, b),
             next_train_state,
             warmup_train_state,

@@ -2,10 +2,10 @@ from abc import ABC, abstractmethod
 from copy import copy
 
 import jax
-from wandb.sdk.wandb_run import Run
 
 from dopamax.agents.base import TrainState
 from dopamax.typing import Metrics
+from wandb.sdk.wandb_run import Run
 
 
 class Callback(ABC):
@@ -25,7 +25,6 @@ class Callback(ABC):
         Returns:
             None
         """
-        pass
 
 
 class WandbCallback(Callback):

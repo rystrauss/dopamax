@@ -4,7 +4,7 @@ from chex import dataclass
 
 from dopamax.environments.brax.base import BraxEnvironment
 from dopamax.environments.utils import register
-from dopamax.spaces import Space, Box
+from dopamax.spaces import Box, Space
 
 _NAME = "brax:InvertedPendulum"
 

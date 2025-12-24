@@ -1,33 +1,37 @@
+import importlib.util
 import os
 import pickle
 import random
 from functools import partial
 
 import click
-import einops
 import haiku as hk
 import jax
 import jax.random
 import numpy as np
-import wandb
 import yaml
 from chex import PRNGKey
 from dm_env import StepType
+from loguru import logger
 from ml_collections import ConfigDict
+from rich.console import Console
+from rich.table import Table
 from tqdm import tqdm
 
+import wandb
 from dopamax.agents.utils import get_agent_cls
 from dopamax.callbacks import WandbCallback
 from dopamax.environments import make_env
 from dopamax.environments.visualization import render_trajectory
-from dopamax.rollouts import rollout_episode, SampleBatch
+from dopamax.rollouts import SampleBatch, rollout_episode
 from dopamax.typing import Observation
+
+console = Console()
 
 
 @click.group()
 def cli():
     """Dopamax provides a collection of reinforcement learning agents and environments implemented in pure JAX."""
-    pass
 
 
 @cli.command(short_help="Train an agent.")
@@ -46,7 +50,7 @@ def cli():
 )
 def train(config, offline, profiler_port):
     """Trains an agent using the provided config file, and logs results to W&B."""
-    with open(config, "r") as f:
+    with open(config) as f:
         config = ConfigDict(yaml.safe_load(f))
 
     if "seed" not in config:
@@ -158,7 +162,8 @@ def evaluate(agent_artifact, num_episodes, render):
 def agent_config(agent):
     """Prints the default config for AGENT."""
     agent_cls = get_agent_cls(agent)
-    print(yaml.dump(agent_cls.default_config().to_dict(), sort_keys=False))
+    config_yaml = yaml.dump(agent_cls.default_config().to_dict(), sort_keys=False)
+    console.print(config_yaml)
 
 
 @cli.command(short_help="Lists all available agents.")
@@ -166,16 +171,35 @@ def list_agents():
     """Lists all available agents."""
     from dopamax.agents.utils import _registry
 
-    print("Available agents:")
+    table = Table(title="Available Agents", show_header=True, header_style="bold magenta")
+    table.add_column("Agent Name", style="cyan")
+
     for agent_name in sorted(_registry.keys()):
-        print("  -", agent_name)
+        table.add_row(agent_name)
+
+    console.print(table)
 
 
 @cli.command(short_help="Lists all available environments.")
 def list_environments():
     """Lists all available environments."""
-    from dopamax.agents.utils import _registry
+    from dopamax.environments.utils import _registry
 
-    print("Available environments:")
-    for agent_name in sorted(_registry.keys()):
-        print("  -", agent_name)
+    table = Table(title="Available Environments", show_header=True, header_style="bold magenta")
+    table.add_column("Environment Name", style="cyan")
+    table.add_column("Type", style="green")
+
+    for env_name in sorted(_registry.keys()):
+        table.add_row(env_name, "Native")
+
+    # Also list gymnax environments
+    if importlib.util.find_spec("gymnax") is not None:
+        table.add_row("", "", style="dim")
+        table.add_row("gymnax:CartPole-v1", "Gymnax", style="dim")
+        table.add_row("gymnax:MountainCar-v0", "Gymnax", style="dim")
+        table.add_row("gymnax:Acrobot-v1", "Gymnax", style="dim")
+        table.add_row("(and many more - see gymnax docs)", "Gymnax", style="dim italic")
+    else:
+        logger.debug("Gymnax not available, skipping gymnax environment listing")
+
+    console.print(table)

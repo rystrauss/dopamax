@@ -1,14 +1,13 @@
 from abc import ABC
-from typing import Tuple
 
 import jax
 import jax.numpy as jnp
 import pgx
-from chex import dataclass, PRNGKey
+from chex import PRNGKey, dataclass
 from dm_env import StepType
 
-from dopamax.environments.environment import EnvState, Environment, TimeStep
-from dopamax.spaces import Box, Space, Discrete, Dict
+from dopamax.environments.environment import Environment, EnvState, TimeStep
+from dopamax.spaces import Box, Dict, Discrete, Space
 from dopamax.typing import Action
 
 
@@ -33,7 +32,7 @@ class PGXEnvironment(Environment, ABC):
 
     _pgx_env: pgx.Env
 
-    def reset(self, key: PRNGKey) -> Tuple[TimeStep, PGXEnvState]:
+    def reset(self, key: PRNGKey) -> tuple[TimeStep, PGXEnvState]:
         pgx_state = self._pgx_env.init(key)
 
         time_step = TimeStep.restart(
@@ -67,7 +66,7 @@ class PGXEnvironment(Environment, ABC):
     def action_space(self) -> Space:
         return Discrete(self._pgx_env.num_actions)
 
-    def step(self, key: PRNGKey, state: PGXEnvState, action: Action) -> Tuple[TimeStep, PGXEnvState]:
+    def step(self, key: PRNGKey, state: PGXEnvState, action: Action) -> tuple[TimeStep, PGXEnvState]:
         prev_terminal = jnp.bool_(state.pgx_state.terminated | state.pgx_state.truncated)
 
         new_pgx_state = self._pgx_env.step(state.pgx_state, action, key)

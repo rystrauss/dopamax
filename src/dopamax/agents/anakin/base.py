@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Optional, Sequence, Callable
+from collections.abc import Callable, Sequence
 
 import einops
 import flashbax as fbx
@@ -8,13 +8,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from chex import PRNGKey, ArrayTree, dataclass
+from chex import ArrayTree, PRNGKey, dataclass
 from dm_env import StepType
-from flashbax.buffers.trajectory_buffer import TrajectoryBuffer, BufferState
+from flashbax.buffers.trajectory_buffer import BufferState, TrajectoryBuffer
 from ml_collections import ConfigDict
 from tqdm import tqdm
 
-from dopamax.agents.base import TrainState, _EPISODE_BUFFER_SIZE, Agent
+from dopamax.agents.base import _EPISODE_BUFFER_SIZE, Agent, TrainState
 from dopamax.environments.environment import EnvState, TimeStep
 from dopamax.rollouts import SampleBatch
 
@@ -305,7 +305,7 @@ class AnakinAgent(Agent, ABC):
         return x
 
     def train(
-        self, key: PRNGKey, num_iterations: int, callback_freq: int = 100, callbacks: Optional[Sequence] = None
+        self, key: PRNGKey, num_iterations: int, callback_freq: int = 100, callbacks: Sequence | None = None
     ) -> hk.Params:
         """Trains the agent.
 
@@ -319,7 +319,8 @@ class AnakinAgent(Agent, ABC):
             The final parameters of the agent.
         """
         if num_iterations % callback_freq != 0:
-            raise ValueError("num_iterations must be a multiple of callback_freq.")
+            msg = "num_iterations must be a multiple of callback_freq."
+            raise ValueError(msg)
 
         pbar = tqdm(total=num_iterations, desc="Training")
         callbacks = callbacks or []
@@ -358,7 +359,9 @@ class AnakinAgent(Agent, ABC):
 
         train_state = initial_train_state_fn(init_consistent_key, init_divergent_key)
 
-        assert (num_iterations // callback_freq) > 0
+        if (num_iterations // callback_freq) <= 0:
+            msg = "num_iterations must be greater than callback_freq."
+            raise ValueError(msg)
 
         for _ in range(num_iterations // callback_freq):
             train_state, metrics = jax.device_get(train_fn(train_state))
@@ -372,7 +375,9 @@ class AnakinAgent(Agent, ABC):
                 metrics = jax.tree.map(lambda x: x[0], metrics)
 
             episode_buffer = AnakinTrainState.episode_buffer()
-            sample_fn = lambda x: episode_buffer.sample(x, jax.random.PRNGKey(0))
+
+            def sample_fn(x):
+                return episode_buffer.sample(x, jax.random.PRNGKey(0))
 
             if self.config.num_envs_per_device > 1:
                 sample_fn = jax.vmap(sample_fn)

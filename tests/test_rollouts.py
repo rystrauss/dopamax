@@ -2,8 +2,7 @@ import chex
 import jax.numpy as jnp
 import jax.random
 
-from dopamax.environments import make_env
-from dopamax.rollouts import create_minibatches, rollout_episode, SampleBatch
+from dopamax.rollouts import create_minibatches
 
 
 def test_create_minibatches():
@@ -15,8 +14,6 @@ def test_create_minibatches():
     key = jax.random.PRNGKey(9)
 
     minibatches = create_minibatches(key, rollout_data, 2)
-
-    print(minibatches)
 
     chex.assert_shape(minibatches["a"], (5, 2, 2))
     chex.assert_shape(minibatches["b"], (5, 2))

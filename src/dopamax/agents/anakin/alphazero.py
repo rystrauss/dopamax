@@ -1,5 +1,4 @@
 from functools import partial
-from typing import Tuple, Dict, Optional
 
 import flashbax as fbx
 import haiku as hk
@@ -7,17 +6,17 @@ import jax
 import jax.numpy as jnp
 import mctx
 import optax
-from chex import PRNGKey, Array, ArrayTree
-from mctx._src.base import RecurrentState, RecurrentFnOutput
+from chex import Array, ArrayTree, PRNGKey
+from mctx._src.base import RecurrentFnOutput, RecurrentState
 from ml_collections import ConfigDict
 
 from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainState, AnakinTrainStateWithReplayBuffer
 from dopamax.agents.utils import register
 from dopamax.environments.environment import Environment, EnvState
 from dopamax.environments.pgx.base import PGXEnvironment
-from dopamax.networks import get_network_build_fn, get_actor_critic_model_fn
+from dopamax.networks import get_actor_critic_model_fn, get_network_build_fn
 from dopamax.rollouts import SampleBatch, rollout_truncated
-from dopamax.typing import Metrics, Observation, Action
+from dopamax.typing import Action, Metrics, Observation
 
 _DEFAULT_ALPHAZERO_CONFIG = ConfigDict(
     {
@@ -53,22 +52,53 @@ _DEFAULT_ALPHAZERO_CONFIG = ConfigDict(
 class AlphaZero(AnakinAgent):
     """AlphaZero agent.
 
-    Note that this implementation is slightly modified from original version of the algorithm as to adhere to the
-    Anakin architecture. It also uses a more modern version of Monte Carlo Tree Search, as implemented by
-    `mctx.muzero_policy`.
+    AlphaZero combines Monte Carlo Tree Search (MCTS) with deep neural networks to learn optimal policies
+    for perfect-information games. This implementation uses the MuZero-style MCTS from the `mctx` library.
+
+    Key features:
+    - Monte Carlo Tree Search with neural network guidance
+    - Self-play for training data generation
+    - Policy and value network learning from MCTS search results
+    - Support for perfect-information games via PGX environments
+
+    Note: This implementation is adapted to work with the Anakin Podracer architecture and uses
+    `mctx.muzero_policy` for MCTS, which is a modern implementation based on MuZero.
 
     Args:
-        env: The environment to interact with. This should be a subclass of `PGXEnvironment`.
-        config: The configuration dictionary for the agent.
+        env: The environment to interact with. Must be a subclass of `PGXEnvironment`.
+        config: The configuration dictionary for the agent. See `default_config()` for available options.
 
     References:
-        https://arxiv.org/abs/1712.01815
+        Silver, D., et al. (2018). "A general reinforcement learning algorithm that masters chess, shogi, and Go
+        through self-play." Science, 362(6419), 1140-1144. https://arxiv.org/abs/1712.01815
+
+        Schrittwieser, J., et al. (2020). "Mastering Atari, Go, Chess and Shogi by Planning with a Learned Model."
+        https://arxiv.org/abs/1911.08265 (MuZero)
     """
 
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
 
-        assert isinstance(env, PGXEnvironment), "AlphaZero only supports `PGXEnvironment`s."
+        if not isinstance(env, PGXEnvironment):
+            msg = (
+                f"AlphaZero only supports PGXEnvironment instances, got {type(env).__name__}. "
+                "Use environments from dopamax.environments.pgx."
+            )
+            raise ValueError(msg)
+
+        # Validate configuration
+        if self.config.num_simulations <= 0:
+            msg = "num_simulations must be positive"
+            raise ValueError(msg)
+        if self.config.max_depth <= 0:
+            msg = "max_depth must be positive"
+            raise ValueError(msg)
+        if self.config.batch_size <= 0:
+            msg = "batch_size must be positive"
+            raise ValueError(msg)
+        if self.config.num_updates <= 0:
+            msg = "num_updates must be positive"
+            raise ValueError(msg)
 
         network_build_fn = get_network_build_fn(self.config.network, **self.config.network_config)
         model_fn = get_actor_critic_model_fn(
@@ -82,7 +112,7 @@ class AlphaZero(AnakinAgent):
 
         def recurrent_fn(
             params: hk.Params, key: PRNGKey, action: Array, embedding: RecurrentState
-        ) -> Tuple[RecurrentFnOutput, RecurrentState]:
+        ) -> tuple[RecurrentFnOutput, RecurrentState]:
             env_state = jax.tree.map(lambda x: jnp.squeeze(x, axis=0), embedding)
             action = jnp.squeeze(action, axis=0)
 
@@ -113,7 +143,7 @@ class AlphaZero(AnakinAgent):
 
         def policy_fn(
             params: hk.Params, key: PRNGKey, observation: Observation, env_state: EnvState
-        ) -> Tuple[Action, Dict[str, ArrayTree]]:
+        ) -> tuple[Action, dict[str, ArrayTree]]:
             model_key, search_key = jax.random.split(key)
             observation = jax.tree.map(lambda x: jnp.expand_dims(x, axis=0), observation)
             env_state = jax.tree.map(lambda x: jnp.expand_dims(x, axis=0), env_state)
@@ -204,7 +234,7 @@ class AlphaZero(AnakinAgent):
         observation: Observation,
         env_state: EnvState,
         deterministic: bool = True,
-        num_simulations: Optional[int] = None,
+        num_simulations: int | None = None,
     ) -> Action:
         model_key, search_key = jax.random.split(key)
 
@@ -288,7 +318,7 @@ class AlphaZero(AnakinAgent):
 
     def train_step(
         self, train_state: AnakinTrainStateWithReplayBuffer
-    ) -> Tuple[AnakinTrainStateWithReplayBuffer, Metrics]:
+    ) -> tuple[AnakinTrainStateWithReplayBuffer, Metrics]:
         next_train_state_key, rollout_key, initial_update_key = jax.random.split(train_state.key, 3)
 
         rollout_data, _, new_time_step, new_env_state = self._rollout_fn(

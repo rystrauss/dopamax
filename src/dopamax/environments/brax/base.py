@@ -1,13 +1,12 @@
 from abc import ABC
-from typing import Tuple
 
 import jax
 import jax.numpy as jnp
 from brax import envs as brax_envs
-from chex import dataclass, PRNGKey
+from chex import PRNGKey, dataclass
 from dm_env import StepType
 
-from dopamax.environments.environment import EnvState, Environment, TimeStep
+from dopamax.environments.environment import Environment, EnvState, TimeStep
 from dopamax.typing import Action
 
 
@@ -23,7 +22,7 @@ class BraxEnvState(EnvState):
 class BraxEnvironment(Environment, ABC):
     _brax_env: brax_envs.PipelineEnv
 
-    def reset(self, key: PRNGKey) -> Tuple[TimeStep, BraxEnvState]:
+    def reset(self, key: PRNGKey) -> tuple[TimeStep, BraxEnvState]:
         brax_state = self._brax_env.reset(key)
 
         time_step = TimeStep.restart(brax_state.obs, brax_state.info)
@@ -36,7 +35,7 @@ class BraxEnvironment(Environment, ABC):
 
         return time_step, env_state
 
-    def step(self, key: PRNGKey, state: BraxEnvState, action: Action) -> Tuple[TimeStep, BraxEnvState]:
+    def step(self, key: PRNGKey, state: BraxEnvState, action: Action) -> tuple[TimeStep, BraxEnvState]:
         prev_terminal = jnp.bool_(state.brax_state.done)
 
         new_brax_state = self._brax_env.step(state.brax_state, action)

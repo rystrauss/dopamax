@@ -28,7 +28,8 @@ def make_env(env_name: str, **kwargs) -> Environment:
         try:
             import gymnax
         except ImportError:
-            raise ImportError("Unable to import gymnax. Please install gymnax (e.g. via 'pip install gymnax').")
+            msg = "Unable to import gymnax. Please install gymnax (e.g. via 'pip install gymnax')."
+            raise ImportError(msg)
 
         env, env_params = gymnax.make(env_name[7:], **kwargs)
         return GymnaxEnvironment(env=env, env_params=env_params)

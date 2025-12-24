@@ -14,7 +14,6 @@
 
 import jax
 from chex import PRNGKey
-
 from flashbax import utils
 from flashbax.buffers.item_buffer import validate_item_buffer_args
 from flashbax.buffers.prioritised_flat_buffer import validate_priority_exponent

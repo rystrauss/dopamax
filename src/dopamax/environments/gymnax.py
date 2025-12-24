@@ -1,4 +1,3 @@
-from typing import Tuple
 
 import gymnax
 import jax
@@ -21,7 +20,8 @@ def _convert_space(space: gymnax.environments.spaces.Space) -> spaces.Space:
     if isinstance(space, gymnax.environments.spaces.Dict):
         return spaces.Dict(spaces=space.spaces)
 
-    raise ValueError(f"Unknown space: {space}")
+    msg = f"Unknown space: {space}"
+    raise ValueError(msg)
 
 
 @dataclass(frozen=True)
@@ -50,13 +50,13 @@ class GymnaxEnvironment(Environment):
     def action_space(self) -> Space:
         return _convert_space(self.env.action_space(self.env_params))
 
-    def reset(self, key: PRNGKey) -> Tuple[TimeStep, GymnaxEnvState]:
+    def reset(self, key: PRNGKey) -> tuple[TimeStep, GymnaxEnvState]:
         obs, gymnax_state = self.env.reset(key, self.env_params)
         state = GymnaxEnvState(episode_length=0, episode_reward=0.0, gymnax_state=gymnax_state)
         ts = TimeStep.restart(self.env.get_obs(gymnax_state))
         return ts, state
 
-    def step(self, key: PRNGKey, state: GymnaxEnvState, action: Action) -> Tuple[TimeStep, GymnaxEnvState]:
+    def step(self, key: PRNGKey, state: GymnaxEnvState, action: Action) -> tuple[TimeStep, GymnaxEnvState]:
         obs, gymnax_state, reward, done, info = self.env.step(key, state.gymnax_state, action, self.env_params)
 
         done = jax.numpy.bool_(done)

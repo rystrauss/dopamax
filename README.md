@@ -23,12 +23,14 @@ Anakin Podracer architecture -- see [this paper][2] for more details.
 
 ## Supported Algorithms
 
-- [Proximal Policy Optimization (PPO)](src/dopamax/agents/anakin/ppo.py)
-- [Deep Q-Network (DQN)](src/dopamax/agents/anakin/dqn.py)
-- [Deep Deterministic Policy Gradients (DDPG)](src/dopamax/agents/anakin/ddpg.py)
-- [Twin Delayed DDPG (TD3)](src/dopamax/agents/anakin/ddpg.py)
-- [Soft Actor Critic](src/dopamax/agents/anakin/sac.py)
-- [AlphaZero](src/dopamax/agents/anakin/alphazero.py)
+Dopamax implements several state-of-the-art reinforcement learning algorithms:
+
+- **[Proximal Policy Optimization (PPO)](src/dopamax/agents/anakin/ppo.py)** - On-policy actor-critic algorithm with clipped objective
+- **[Deep Q-Network (DQN)](src/dopamax/agents/anakin/dqn.py)** - Value-based algorithm with experience replay, supports double Q-learning, dueling networks, and prioritized replay
+- **[Deep Deterministic Policy Gradients (DDPG)](src/dopamax/agents/anakin/ddpg.py)** - Off-policy actor-critic for continuous control
+- **[Twin Delayed DDPG (TD3)](src/dopamax/agents/anakin/ddpg.py)** - Improved DDPG with twin critics and target policy smoothing
+- **[Soft Actor Critic (SAC)](src/dopamax/agents/anakin/sac.py)** - Off-policy maximum entropy RL, supports both discrete and continuous actions
+- **[AlphaZero](src/dopamax/agents/anakin/alphazero.py)** - MCTS-based algorithm for perfect-information games
 
 ## Installation
 
@@ -50,12 +52,22 @@ install the appropriate version of JAX. See the
 > pip install git+https://github.com/rystrauss/dopamax.git
 > ```
 
-## Usage
+## Quick Start
 
-After installation, the Dopamax CLI can be used to train and evaluate agents:
+After installation, you can use the Dopamax CLI to train and evaluate agents:
 
 ```bash
+# See all available commands
 dopamax --help
+
+# List available agents
+dopamax list-agents
+
+# List available environments
+dopamax list-environments
+
+# View default config for an agent
+dopamax agent-config PPO
 ```
 
 Dopamax uses [Weights and Biases (W&B)](https://wandb.ai/site) for logging and artifact management. Before using the CLI
@@ -94,10 +106,27 @@ have then logged back to W&B, you can provide the `--render` flag. But note that
 down the evaluation process since environment rendering is not a pure JAX function and requires callbacks to the host.
 You should usually only use the `--render` flag with a small number of episodes.
 
+## Features
+
+- **Pure JAX Implementation**: Everything is implemented in JAX, enabling fast compilation and execution on CPUs, GPUs, and TPUs
+- **Anakin Podracer Architecture**: Follows the Anakin architecture for efficient parallelization across devices
+- **Comprehensive Algorithm Suite**: Includes both on-policy and off-policy algorithms for discrete and continuous control
+- **Flexible Configuration**: YAML-based configuration system for easy experiment management
+- **Production Ready**: Includes logging, checkpointing, and evaluation tools
+
+## Architecture
+
+Dopamax follows the [Anakin Podracer architecture](https://arxiv.org/abs/2104.06272), which enables:
+- Efficient vectorization across batches within each device
+- Parallelization across multiple devices (multi-GPU/TPU support)
+- Single XLA compilation of the entire training loop
+- Minimal host-device communication overhead
+
 ## See Also
 
 Some of the JAX-native packages that Dopamax relies on:
-- [sotetsuk/pgx](https://github.com/sotetsuk/pgx)
-- [deepmind/mctx](https://github.com/deepmind/mctx)
-- [deepmind/rlax](https://github.com/deepmind/rlax)
-- [google/brax](https://github.com/google/brax)
+- [sotetsuk/pgx](https://github.com/sotetsuk/pgx) - JAX-based game environments
+- [deepmind/mctx](https://github.com/deepmind/mctx) - Monte Carlo Tree Search in JAX
+- [deepmind/rlax](https://github.com/deepmind/rlax) - RL building blocks
+- [google/brax](https://github.com/google/brax) - Physics simulation environments
+- [deepmind/gymnax](https://github.com/RobertTLange/gymnax) - Classic control environments

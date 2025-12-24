@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional, Sequence
+from collections.abc import Sequence
 
 import haiku as hk
-from chex import dataclass, PRNGKey
+from chex import PRNGKey, dataclass
 from flashbax.buffers.trajectory_buffer import BufferState
 from ml_collections import ConfigDict
 
 from dopamax.environments.environment import Environment
 from dopamax.spaces import Space
-from dopamax.typing import Observation, Action, Metrics
+from dopamax.typing import Action, Metrics, Observation
 
 # The number of most recent episodes to average over when logging performance.
 _EPISODE_BUFFER_SIZE = 128
@@ -85,7 +85,6 @@ class Agent(ABC):
         Returns:
             An array of actions corresponding to the given observations.
         """
-        pass
 
     @abstractmethod
     def initial_train_state(self, consistent_key: PRNGKey, divergent_key: PRNGKey) -> TrainState:
@@ -100,10 +99,9 @@ class Agent(ABC):
         Returns:
             The initial training state.
         """
-        pass
 
     @abstractmethod
-    def train_step(self, train_state: TrainState) -> Tuple[TrainState, Metrics]:
+    def train_step(self, train_state: TrainState) -> tuple[TrainState, Metrics]:
         """Performs a single training step.
 
         A training step should include experience collection and parameter updates.
@@ -115,11 +113,10 @@ class Agent(ABC):
             train_state: The updated training state.
             metrics: A dictionary of metrics to be logged.
         """
-        pass
 
     @abstractmethod
     def train(
-        self, key: PRNGKey, num_iterations: int, callback_freq: int = 100, callbacks: Optional[Sequence] = None
+        self, key: PRNGKey, num_iterations: int, callback_freq: int = 100, callbacks: Sequence | None = None
     ) -> hk.Params:
         """Trains the agent.
 
@@ -132,4 +129,3 @@ class Agent(ABC):
         Returns:
             The final parameters of the agent.
         """
-        pass

@@ -1,6 +1,5 @@
 import math
 from functools import partial
-from typing import Tuple, Dict
 
 import flashbax as fbx
 import haiku as hk
@@ -8,22 +7,22 @@ import jax
 import jax.numpy as jnp
 import optax
 import rlax
-from chex import PRNGKey, ArrayTree
+from chex import ArrayTree, PRNGKey
 from ml_collections import ConfigDict
 
 from dopamax.agents.anakin.base import AnakinAgent, AnakinTrainState, AnakinTrainStateWithReplayBuffer
 from dopamax.agents.utils import register
 from dopamax.environments.environment import Environment
 from dopamax.networks import (
-    get_network_build_fn,
     get_actor_critic_model_fn,
-    get_discrete_q_network_model_fn,
     get_continuous_q_network_model_fn,
+    get_discrete_q_network_model_fn,
+    get_network_build_fn,
 )
 from dopamax.prioritized_item_buffer import create_prioritised_item_buffer
-from dopamax.rollouts import rollout_truncated, SampleBatch
+from dopamax.rollouts import SampleBatch, rollout_truncated
 from dopamax.spaces import Discrete
-from dopamax.typing import Metrics, Observation, Action
+from dopamax.typing import Action, Metrics, Observation
 from dopamax.utils import expand_apply
 
 _DEFAULT_SAC_CONFIG = ConfigDict(
@@ -54,20 +53,51 @@ _DEFAULT_SAC_CONFIG = ConfigDict(
 
 @register("SAC")
 class SAC(AnakinAgent):
-    """The Soft Actor-Critic algorithm.
+    """Soft Actor-Critic (SAC) algorithm.
+
+    SAC is an off-policy actor-critic algorithm that uses entropy regularization to encourage exploration.
+    This implementation supports both discrete and continuous action spaces.
+
+    Key features:
+    - Automatic temperature (alpha) tuning for entropy regularization
+    - Twin Q-networks to reduce overestimation bias
+    - Target Q-networks with soft updates (Polyak averaging)
+    - Optional prioritized experience replay
+    - Support for both discrete and continuous action spaces
 
     Args:
         env: The environment to interact with.
-        config: The configuration dictionary for the agent.
+        config: The configuration dictionary for the agent. See `default_config()` for available options.
 
     References:
+        Haarnoja, T., et al. (2018). "Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning
+        with a Stochastic Actor." https://arxiv.org/abs/1801.01290
+
+        Haarnoja, T., et al. (2018). "Soft Actor-Critic Algorithms and Applications."
         https://arxiv.org/abs/1812.05905
+
+        Christodoulou, P. (2019). "Soft Actor-Critic for Discrete Action Settings."
+        https://arxiv.org/abs/1910.07207
     """
 
     def __init__(self, env: Environment, config: ConfigDict):
         super().__init__(env, config)
 
         self._discrete = isinstance(env.action_space, Discrete)
+
+        # Validate configuration
+        if self.config.learning_starts < 0:
+            msg = "learning_starts must be non-negative"
+            raise ValueError(msg)
+        if self.config.target_update_interval <= 0:
+            msg = "target_update_interval must be positive"
+            raise ValueError(msg)
+        if self.config.tau <= 0 or self.config.tau > 1:
+            msg = "tau must be in (0, 1]"
+            raise ValueError(msg)
+        if self.config.initial_alpha <= 0:
+            msg = "initial_alpha must be positive"
+            raise ValueError(msg)
 
         if self.config.target_entropy == "auto":
             if self._discrete:
@@ -110,7 +140,7 @@ class SAC(AnakinAgent):
             key: PRNGKey,
             observation: Observation,
             uniform_sample: bool,
-        ) -> Tuple[Action, Dict[str, ArrayTree]]:
+        ) -> tuple[Action, dict[str, ArrayTree]]:
             model_key, sample_key = jax.random.split(key)
 
             pi = expand_apply(partial(self._actor.apply, actor_params, model_key))(observation)
@@ -189,14 +219,26 @@ class SAC(AnakinAgent):
         observation: Observation,
         deterministic: bool = True,
     ) -> Action:
+        """Computes an action for the given observation.
+
+        Args:
+            params: The agent's parameters.
+            key: A PRNG key.
+            observation: The observation to compute an action for.
+            deterministic: If True, returns the mode (discrete) or mean (continuous) of the policy.
+                If False, samples from the policy distribution.
+
+        Returns:
+            The computed action.
+        """
         sample_key, model_key = jax.random.split(key)
 
         pi = self._actor.apply(params["online"], model_key, observation)
 
-        if not deterministic:
+        if deterministic:
             action = pi.mode() if self._discrete else pi.mean()
         else:
-            action = pi.sample(sample_key)
+            action = pi.sample(seed=sample_key)
 
         return action
 
@@ -379,7 +421,7 @@ class SAC(AnakinAgent):
 
     def train_step(
         self, train_state: AnakinTrainStateWithReplayBuffer
-    ) -> Tuple[AnakinTrainStateWithReplayBuffer, Metrics]:
+    ) -> tuple[AnakinTrainStateWithReplayBuffer, Metrics]:
         next_train_state_key, rollout_key, update_key, sample_key = jax.random.split(train_state.key, 4)
 
         rollout_data, _, new_time_step, new_env_state = self._rollout_fn(
@@ -400,7 +442,7 @@ class SAC(AnakinAgent):
         importance_weights **= self._beta_schedule(train_state.train_step)
         importance_weights /= jnp.max(importance_weights)
 
-        sample = jax.tree_map(lambda x: jnp.squeeze(x, 1), sample)
+        sample = jax.tree.map(lambda x: jnp.squeeze(x, 1), sample)
 
         new_params, new_opt_state, metrics, td_error = self._update(
             train_state.train_step,
@@ -419,7 +461,7 @@ class SAC(AnakinAgent):
             new_priorities = jnp.abs(td_error) + 1e-6
             new_buffer_state = self._buffer.set_priorities(new_buffer_state, batch.indices, new_priorities)
 
-        metrics = jax.tree_map(jnp.mean, metrics)
+        metrics = jax.tree.map(jnp.mean, metrics)
 
         next_train_state = train_state.update(
             new_key=next_train_state_key,
@@ -443,7 +485,7 @@ class SAC(AnakinAgent):
             maybe_all_reduce_fn=self._maybe_all_reduce,
         )
 
-        next_train_state = jax.tree_map(
+        next_train_state = jax.tree.map(
             lambda a, b: jax.lax.select(jnp.any(train_state.train_step > self.config.learning_starts), a, b),
             next_train_state,
             warmup_train_state,

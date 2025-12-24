@@ -1,4 +1,4 @@
-from typing import Sequence, Optional, Callable, Tuple, Union
+from collections.abc import Callable, Sequence
 
 import distrax
 import haiku as hk
@@ -7,8 +7,8 @@ import jax.numpy as jnp
 from chex import Array
 
 from dopamax.distributions import Transformed
-from dopamax.spaces import Space, Discrete, Box
-from dopamax.typing import Observation, Action
+from dopamax.spaces import Box, Discrete, Space
+from dopamax.typing import Action, Observation
 
 _registry = {}
 
@@ -41,14 +41,25 @@ def get_network_build_fn(name: str, **kwargs) -> NetworkBuildFn:
 
 @register("mlp")
 def get_mlp_build_fn(hidden_units: Sequence[int] = (64, 64), activation: str = "relu") -> NetworkBuildFn:
-    """Gets a network build function for a multi-layer perceptron.
+    """Gets a network build function for a multi-layer perceptron (MLP).
+
+    Creates a simple feedforward neural network with the specified architecture. The network includes
+    a flattening layer at the input (to handle multi-dimensional inputs) and applies the specified
+    activation function to all hidden layers.
 
     Args:
         hidden_units: A sequence of integers representing the number of hidden units in each layer.
-        activation: The activation function to use in each layer. Must exist in `jax.nn`.
+            For example, `[64, 64]` creates a 2-layer MLP with 64 units in each layer.
+        activation: The activation function to use in each layer. Must be a valid function name
+            in `jax.nn` (e.g., "relu", "tanh", "sigmoid", "elu", "gelu").
 
     Returns:
-        A network build function for the specified MLP.
+        A network build function that returns a Haiku Sequential module representing the MLP.
+
+    Example:
+        >>> network_build_fn = get_mlp_build_fn(hidden_units=[128, 64, 32], activation="relu")
+        >>> network = network_build_fn()
+        >>> output = network(observations)  # observations shape: [batch_size, obs_dim]
     """
     return lambda: hk.Sequential(
         [
@@ -74,7 +85,7 @@ class CNN(hk.Module):
 
     def __init__(
         self,
-        conv_layers: Sequence[Tuple[int, int, int]],
+        conv_layers: Sequence[tuple[int, int, int]],
         activation: Callable[[jnp.ndarray], jnp.ndarray],
         activate_final: bool = False,
     ):
@@ -97,22 +108,35 @@ NATURE_CNN_CONV_LAYERS = ((32, 8, 4), (64, 4, 2), (64, 3, 1))
 
 @register("cnn")
 def get_cnn_build_fn(
-    conv_layers: Sequence[Tuple[int, int, int]] = NATURE_CNN_CONV_LAYERS,
+    conv_layers: Sequence[tuple[int, int, int]] = NATURE_CNN_CONV_LAYERS,
     hidden_units: Sequence[int] = (512,),
     activation: str = "relu",
 ) -> NetworkBuildFn:
-    """Gets a network build function for a CNN.
+    """Gets a network build function for a Convolutional Neural Network (CNN).
 
-    Default values for keyword arguments are for the CNN used in the DQN Nature paper.
+    Creates a CNN architecture suitable for processing image observations. The network consists of
+    convolutional layers followed by fully-connected layers. Default values match the architecture
+    used in the DQN Nature paper.
 
     Args:
-        conv_layers: A sequence of tuples representing the number of channels, kernel size, and stride for each layer.
-        hidden_units: A sequence of integers representing the number of hidden units in each fully-connected layer
-            after the convolutions.
-        activation: The activation function to use in each layer. Must exist in `jax.nn`.
+        conv_layers: A sequence of tuples `(channels, kernel_size, stride)` for each convolutional layer.
+            For example, `[(32, 8, 4), (64, 4, 2), (64, 3, 1)]` creates three conv layers.
+        hidden_units: A sequence of integers representing the number of hidden units in each
+            fully-connected layer after the convolutions. Default is `(512,)` for a single FC layer.
+        activation: The activation function to use in each layer. Must be a valid function name
+            in `jax.nn` (e.g., "relu", "tanh", "sigmoid").
 
     Returns:
-        A network build function for the specified MLP.
+        A network build function that returns a Haiku Sequential module representing the CNN.
+
+    Example:
+        >>> # Nature DQN architecture
+        >>> network_build_fn = get_cnn_build_fn()
+        >>> # Custom architecture
+        >>> network_build_fn = get_cnn_build_fn(
+        ...     conv_layers=[(16, 3, 1), (32, 3, 1)],
+        ...     hidden_units=[256, 128]
+        ... )
     """
     return lambda: hk.Sequential(
         [
@@ -131,33 +155,53 @@ def get_cnn_build_fn(
 def get_actor_critic_model_fn(
     action_space: Space,
     network_build_fn: NetworkBuildFn,
-    value_network: Optional[str] = None,
+    value_network: str | None = None,
     free_log_std: bool = False,
     tanh_value: bool = False,
     tanh_policy: bool = False,
-) -> Callable[[Observation], Union[distrax.Distribution, Tuple[distrax.Distribution, Array]]]:
+) -> Callable[[Observation], distrax.Distribution | tuple[distrax.Distribution, Array]]:
     """Gets a model function for a generic actor-critic agent.
 
-    Here, a model refers to a function that takes observations as input and returns a policy distribution and a value
-    estimate.
+    This function creates a Haiku transformable model that maps observations to policy distributions and value estimates.
+    The model supports both discrete and continuous action spaces, with various options for network architecture and
+    policy parameterization.
 
     Args:
-        action_space: The action space that the policy should operate in.
-        network_build_fn: A network build function that will be used to construct the model's networks.
-        value_network: The type of value network to use. If `None`, the model will not have a value estimate and will
-            only output a policy distribution. If "copy", the value network be a copy of the policy network, but with
-            independent parameters. If "shared", the value network will share the same parameters as the policy network
-            (excluding the output layer).
-        free_log_std: If True, the scales of Gaussian policies will be learned as free parameters. Otherwise, they will
-            be functions of the observations.
-        tanh_value: If True, the value estimate will be passed through a tanh activation function.
-        tanh_policy: Whether to apply a Tanh bijector to the policy (only works for continuous action spaces).
+        action_space: The action space that the policy should operate in. Must be either `Discrete` or `Box`.
+        network_build_fn: A network build function that will be used to construct the model's networks. This should
+            return a Haiku module that processes observations.
+        value_network: The type of value network to use. Options:
+            - `None`: No value network, only returns policy distribution.
+            - `"copy"`: Independent value network with same architecture as policy network.
+            - `"shared"`: Value network shares parameters with policy network (except output layer).
+        free_log_std: If True, the standard deviation of Gaussian policies will be learned as a free parameter
+            (not dependent on observations). If False, the standard deviation is a function of the observations.
+            Only applies to continuous action spaces.
+        tanh_value: If True, the value estimate will be passed through a tanh activation function to bound it to [-1, 1].
+            Useful for environments with bounded rewards.
+        tanh_policy: If True, applies a Tanh bijector to the policy distribution. This is useful for continuous action
+            spaces where actions need to be bounded. Only works for continuous action spaces.
 
     Returns:
-        A model function for the specified actor-critic agent.
+        A model function that takes observations and returns either:
+        - A policy distribution (if `value_network` is `None`)
+        - A tuple of (policy distribution, value estimate) (if `value_network` is not `None`)
+
+    Raises:
+        NotImplementedError: If the action space is not `Discrete` or `Box`.
+        ValueError: If `value_network` is not one of the supported options.
+
+    Example:
+        >>> from dopamax.networks import get_network_build_fn, get_actor_critic_model_fn
+        >>> from dopamax.spaces import Discrete
+        >>> 
+        >>> action_space = Discrete(4)
+        >>> network_build_fn = get_network_build_fn("mlp", hidden_units=[64, 64])
+        >>> model_fn = get_actor_critic_model_fn(action_space, network_build_fn, value_network="copy")
+        >>> # model_fn can now be transformed with hk.transform()
     """
 
-    def model_fn(observations: Observation) -> Union[distrax.Distribution, Tuple[distrax.Distribution, Array]]:
+    def model_fn(observations: Observation) -> distrax.Distribution | tuple[distrax.Distribution, Array]:
         policy_net = network_build_fn()
 
         policy_net_output = policy_net(observations)
@@ -186,7 +230,8 @@ def get_actor_critic_model_fn(
                 policy = Transformed(policy, distrax.Block(distrax.Tanh(), ndims=1))
 
         else:
-            raise NotImplementedError(f"Unsupported action space: {action_space}")
+            msg = f"Unsupported action space: {action_space}"
+            raise NotImplementedError(msg)
 
         if value_network is None:
             return policy
@@ -197,7 +242,8 @@ def get_actor_critic_model_fn(
             value_net = network_build_fn()
             values = hk.Linear(1, w_init=hk.initializers.Orthogonal(1.0))(value_net(observations))
         else:
-            raise ValueError(f"Unsupported value network: {value_network}")
+            msg = f"Unsupported value network: {value_network}"
+            raise ValueError(msg)
 
         values = jnp.squeeze(values, axis=-1)
 
@@ -250,15 +296,15 @@ def get_discrete_q_network_model_fn(
     final_hidden_units: Sequence[int] = tuple(),
     dueling: bool = False,
     use_twin: bool = False,
-) -> Union[Callable[[Observation], Array], Callable[[Observation], Tuple[Array, Array]]]:
+) -> Callable[[Observation], Array] | Callable[[Observation], tuple[Array, Array]]:
     def model_fn(observations: Observation) -> Array:
         base_net = network_build_fn()
         base_net_output = base_net(observations)
 
         if dueling:
-            assert (
-                final_hidden_units
-            ), "Dueling networks must have at least one hidden layer provided in `final_hidden_units`."
+            if not final_hidden_units:
+                msg = "Dueling networks must have at least one hidden layer provided in `final_hidden_units`."
+                raise ValueError(msg)
 
             advantage_net = hk.Sequential(
                 [
@@ -291,7 +337,7 @@ def get_discrete_q_network_model_fn(
 
     if use_twin:
 
-        def twin_model_fn(observations: Observation) -> Tuple[Array, Array]:
+        def twin_model_fn(observations: Observation) -> tuple[Array, Array]:
             q1_fn = get_discrete_q_network_model_fn(action_space, network_build_fn, final_hidden_units)
             q2_fn = get_discrete_q_network_model_fn(action_space, network_build_fn, final_hidden_units)
 
@@ -307,7 +353,7 @@ def get_continuous_q_network_model_fn(
     network_build_fn: NetworkBuildFn,
     final_hidden_units: Sequence[int] = tuple(),
     use_twin: bool = False,
-) -> Union[Callable[[Observation, Action], Array], Callable[[Observation, Action], Tuple[Array, Array]]]:
+) -> Callable[[Observation, Action], Array] | Callable[[Observation, Action], tuple[Array, Array]]:
     def model_fn(observations: Observation, actions: Action) -> Array:
         base_net = network_build_fn()
 
@@ -330,7 +376,7 @@ def get_continuous_q_network_model_fn(
 
     if use_twin:
 
-        def twin_model_fn(observations: Observation, actions: Action) -> Tuple[Array, Array]:
+        def twin_model_fn(observations: Observation, actions: Action) -> tuple[Array, Array]:
             q1_fn = get_continuous_q_network_model_fn(observation_space, network_build_fn, final_hidden_units)
             q2_fn = get_continuous_q_network_model_fn(observation_space, network_build_fn, final_hidden_units)
 

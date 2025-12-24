@@ -1,14 +1,14 @@
-from typing import Tuple, Dict, Protocol
+from typing import Protocol
 
 import chex
 import einops
 import haiku as hk
 import jax
-from chex import PRNGKey, ArrayTree
+from chex import ArrayTree, PRNGKey
 from dm_env import StepType
 
 from dopamax.environments.environment import Environment, EnvState, TimeStep
-from dopamax.typing import Observation, Action
+from dopamax.typing import Action, Observation
 
 
 class SampleBatch(dict):
@@ -35,7 +35,7 @@ class SampleBatch(dict):
 class PolicyFn(Protocol):
     def __call__(
         self, params: hk.Params, key: PRNGKey, observation: Observation, **kwargs
-    ) -> Tuple[Action, Dict[str, ArrayTree]]: ...
+    ) -> tuple[Action, dict[str, ArrayTree]]: ...
 
 
 def rollout_episode(
@@ -113,7 +113,7 @@ def rollout_truncated(
     env_state: EnvState,
     pass_env_state_to_policy: bool = False,
     **policy_fn_kwargs,
-) -> Tuple[SampleBatch, PRNGKey, EnvState, TimeStep]:
+) -> tuple[SampleBatch, PRNGKey, EnvState, TimeStep]:
     """Rollout for a given number of steps, possibly over multiple episodes.
 
     If an episode ends before the given number of steps, the environment will be automatically reset, and the trajectory

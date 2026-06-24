@@ -222,7 +222,7 @@ class DDPG(AnakinAgent):
             msg = "Stochastic actions are not yet implemented for DDPG. Use deterministic=True."
             raise NotImplementedError(msg)
 
-        return self._actor.apply(params["online"], key, observation)
+        return self._actor.apply(params["online"]["actor"], key, observation)
 
     def _initial_train_state_without_replay_buffer(
         self, consistent_key: PRNGKey, divergent_key: PRNGKey
@@ -267,8 +267,13 @@ class DDPG(AnakinAgent):
         target_actions = self._actor.apply(target_actor_params, key, next_obs)
 
         if self.config.smooth_target_policy:
-            epsilon = jax.random.normal(key, target_actions.shape) * self.config.target_noise
-            epsilon = jnp.clip(epsilon, -self.config.target_noise_clip, self.config.target_noise_clip)
+            # The canonical TD3 target_noise/target_noise_clip (0.2/0.5) are defined for actions in [-1, 1]. The
+            # actor outputs in the env's [low, high] range, so scale the noise/clip by the per-dim action half-range
+            # (a no-op for [-1, 1] action spaces).
+            action_scale = 0.5 * (self._action_space_high - self._action_space_low)
+            epsilon = jax.random.normal(key, target_actions.shape) * self.config.target_noise * action_scale
+            clip = self.config.target_noise_clip * action_scale
+            epsilon = jnp.clip(epsilon, -clip, clip)
             target_actions += epsilon
             target_actions = jnp.clip(
                 target_actions,
@@ -350,12 +355,11 @@ class DDPG(AnakinAgent):
         new_online_critic_params = optax.apply_updates(params["online"]["critic"], critic_updates)
         new_online_actor_params = optax.apply_updates(params["online"]["actor"], actor_updates)
 
+        # Delayed (TD3-style) actor update: only step the actor every policy_delay updates. Warmup gating
+        # (train_step > learning_starts) is handled by the outer select in train_step, so it is not repeated here.
         new_online_actor_params, new_actor_opt_state = jax.tree.map(
             lambda a, b: jax.lax.select(
-                jnp.logical_and(
-                    jnp.any(train_step > 0),
-                    jnp.any(train_step % self.config.policy_delay == 0),
-                ),
+                train_step % self.config.policy_delay == 0,
                 a,
                 b,
             ),
@@ -381,7 +385,6 @@ class DDPG(AnakinAgent):
 
         new_params = {"online": new_online_params, "target": new_target_params}
         new_opt_state = {"actor": new_actor_opt_state, "critic": new_critic_opt_state}
-        info = {}
 
         return new_params, new_opt_state, info, td_error
 
@@ -405,7 +408,7 @@ class DDPG(AnakinAgent):
 
         batch = self._buffer.sample(new_buffer_state, sample_key)
         sample = batch.experience
-        priorities = batch.priorities if self.config.prioritized_replay else 1.0
+        priorities = batch.probabilities if self.config.prioritized_replay else 1.0
 
         importance_weights = 1.0 / priorities
         importance_weights **= self._beta_schedule(train_state.train_step)

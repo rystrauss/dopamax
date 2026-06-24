@@ -24,7 +24,8 @@ class RunningStats:
         self._dtype = dtype
         self._count = 0
         self._mean = jnp.zeros(shape, dtype=dtype)
-        self._var = jnp.ones(shape, dtype=dtype)
+        # Welford's M2 accumulator (sum of squared deviations from the running mean); the variance is M2 / count.
+        self._m2 = jnp.zeros(shape, dtype=dtype)
 
     @property
     def count(self) -> int:
@@ -38,8 +39,12 @@ class RunningStats:
 
     @property
     def std(self) -> Array:
-        """The current standard deviation."""
-        return jnp.sqrt(self._var)
+        """The current (population) standard deviation."""
+        # Convert the M2 accumulator into a variance by dividing by the count. Before any samples are seen, fall back
+        # to a unit scale so the first normalize() does not divide by ~0.
+        if self._count == 0:
+            return jnp.ones(self._shape, dtype=self._dtype)
+        return jnp.sqrt(self._m2 / self._count)
 
     def update(self, x: Array) -> None:
         """Update statistics with a new sample.
@@ -51,7 +56,7 @@ class RunningStats:
         delta = x - self._mean
         self._mean += delta / self._count
         delta2 = x - self._mean
-        self._var += delta * delta2
+        self._m2 += delta * delta2
 
     def normalize(self, x: Array, epsilon: float = 1e-8) -> Array:
         """Normalize a value using the current statistics.
@@ -115,4 +120,3 @@ def normalize_rewards(rewards: Array, mean: float, std: float, epsilon: float = 
         The normalized rewards: (rewards - mean) / (std + epsilon)
     """
     return (rewards - mean) / (std + epsilon)
-

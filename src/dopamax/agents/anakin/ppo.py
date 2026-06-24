@@ -30,9 +30,10 @@ _DEFAULT_PPO_CONFIG = ConfigDict(
         "initial_learning_rate": 2.5e-4,
         # The final learning rate.
         "final_learning_rate": 2.5e-4,
-        # The number of steps over which to linearly decay the learning rate. Note that this is not the number of train
-        # iterations, but the number of gradient updates.
-        "learning_rate_decay_steps": 1,
+        # The number of gradient updates over which to linearly decay the learning rate from initial_learning_rate to
+        # final_learning_rate (note: gradient updates, not train iterations). The default of 0 disables decay (the rate
+        # is held at initial_learning_rate). Must be > 1 when initial_learning_rate != final_learning_rate.
+        "learning_rate_decay_steps": 0,
         # The maximum gradient norm.
         "max_grad_norm": 0.5,
         # The size of the minibatches to perform gradient updates on. This should be a factor of the rollout fragment
@@ -102,6 +103,15 @@ class PPO(AnakinAgent):
             raise ValueError(msg)
         if self.config.value_network not in ("copy", "shared"):
             msg = f"value_network must be 'copy' or 'shared', got '{self.config.value_network}'"
+            raise ValueError(msg)
+        if (
+            self.config.initial_learning_rate != self.config.final_learning_rate
+            and self.config.learning_rate_decay_steps <= 1
+        ):
+            msg = (
+                "learning_rate_decay_steps must be > 1 when initial_learning_rate != final_learning_rate; "
+                f"got {self.config.learning_rate_decay_steps}."
+            )
             raise ValueError(msg)
 
         network_build_fn = get_network_build_fn(self.config.network, **self.config.network_config)
@@ -195,12 +205,6 @@ class PPO(AnakinAgent):
             "policy_loss": policy_loss,
             "value_loss": value_loss,
             "policy_entropy": entropy,
-            "value_explained_variance": explained_variance(
-                returns,
-                value_preds,
-                self.config.num_envs_per_device,
-                self.config.num_devices,
-            ),
             "clip_frac": clip_frac,
         }
 
@@ -248,18 +252,30 @@ class PPO(AnakinAgent):
             values,
         )
 
-        # Normalize advantages if configured
+        # Explained variance is a non-linear ratio of variances, so averaging per-minibatch values is misleading.
+        # Compute it once on the full rollout (behavior-time value predictions vs. returns); all-reduced internally.
+        value_explained_variance = explained_variance(
+            rollout_data[SampleBatch.RETURN],
+            rollout_data[SampleBatch.VALUE],
+            self.config.num_envs_per_device,
+            self.config.num_devices,
+        )
+
+        # Normalize advantages if configured. Moments are all-reduced across envs/devices so the standardization
+        # matches a single large-batch PPO rather than each replica normalizing against its own local statistics.
         if self.config.normalize_advantages:
             advantages = rollout_data[SampleBatch.ADVANTAGE]
-            advantages_mean = jnp.mean(advantages)
-            advantages_std = jnp.std(advantages) + 1e-8
+            advantages_mean = self._maybe_all_reduce("pmean", jnp.mean(advantages))
+            advantages_mean_sq = self._maybe_all_reduce("pmean", jnp.mean(advantages**2))
+            advantages_std = jnp.sqrt(jnp.maximum(advantages_mean_sq - advantages_mean**2, 0.0)) + 1e-8
             rollout_data[SampleBatch.ADVANTAGE] = (advantages - advantages_mean) / advantages_std
 
-        # Normalize value targets if configured
+        # Normalize value targets if configured (also using global, all-reduced moments).
         if self.config.normalize_values:
             returns = rollout_data[SampleBatch.RETURN]
-            returns_mean = jnp.mean(returns)
-            returns_std = jnp.std(returns) + 1e-8
+            returns_mean = self._maybe_all_reduce("pmean", jnp.mean(returns))
+            returns_mean_sq = self._maybe_all_reduce("pmean", jnp.mean(returns**2))
+            returns_std = jnp.sqrt(jnp.maximum(returns_mean_sq - returns_mean**2, 0.0)) + 1e-8
             rollout_data[SampleBatch.RETURN] = (returns - returns_mean) / returns_std
 
         def update_scan_fn(carry, minibatch):
@@ -298,6 +314,7 @@ class PPO(AnakinAgent):
         )
 
         metrics = jax.tree.map(jnp.mean, metrics)
+        metrics["value_explained_variance"] = value_explained_variance
 
         next_train_state = train_state.update(
             new_key=next_train_state_key,

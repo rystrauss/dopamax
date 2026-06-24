@@ -1,13 +1,19 @@
 """Utilities for checkpointing and resuming training."""
 
+from __future__ import annotations
+
 import pickle
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import haiku as hk
 from loguru import logger
 
-from dopamax.agents.base import TrainState
+if TYPE_CHECKING:
+    # Imported only for type hints. Importing dopamax.agents at runtime here would create a circular import:
+    # dopamax.utils -> checkpointing -> dopamax.agents -> (agents import dopamax.utils.expand_apply, which is
+    # not yet defined because dopamax.utils is still mid-initialization).
+    from dopamax.agents.base import TrainState
 
 
 def save_checkpoint(
@@ -160,4 +166,3 @@ def load_params(params_path: str | Path) -> hk.Params:
 
     logger.info(f"Loaded parameters from {params_path}")
     return params
-

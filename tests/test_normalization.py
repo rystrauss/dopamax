@@ -84,4 +84,3 @@ def test_normalize_rewards():
 
     assert jnp.allclose(jnp.mean(normalized), 0.0, atol=1e-5)
     assert jnp.allclose(jnp.std(normalized), 1.0, atol=1e-5)
-

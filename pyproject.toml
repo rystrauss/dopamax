@@ -68,6 +68,6 @@ line-ending = "auto"
 dev = [
     "jupyterlab",
     "pytest>=8.3.4",
-    "tensorboard-plugin-profile>=2.19.0",
+    "tensorboard-plugin-profile>=2.19.0; sys_platform == 'win32'",
     "tensorflow>=2.18.0",
 ]

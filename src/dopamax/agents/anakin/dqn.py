@@ -232,6 +232,10 @@ class DQN(AnakinAgent):
         next_q_values = self._model.apply(target_params, key, next_obs)
         q_values = self._model.apply(online_params, key, obs)
 
+        # The environment discount is a pure termination mask (1.0 mid-episode, 0.0 on termination); scale it by
+        # gamma so the Bellman backup target = r + gamma * mask * max_a' Q(s', a').
+        discounts = discounts * self.config.gamma
+
         if self.config.double:
             next_q_selectors = self._model.apply(online_params, key, next_obs)
             td_error = jax.vmap(rlax.double_q_learning)(
@@ -240,7 +244,9 @@ class DQN(AnakinAgent):
         else:
             td_error = jax.vmap(rlax.q_learning)(q_values, actions, rewards, discounts, next_q_values)
 
-        loss = jnp.mean(rlax.l2_loss(td_error * weights))
+        # Apply the prioritized-replay importance-sampling weight linearly to the squared TD error (w * 0.5 * delta^2),
+        # not inside it (which would square the weight).
+        loss = jnp.mean(weights * rlax.l2_loss(td_error))
 
         metrics = {
             "loss": loss,
@@ -297,7 +303,7 @@ class DQN(AnakinAgent):
 
         batch = self._buffer.sample(new_buffer_state, sample_key)
         sample = batch.experience
-        priorities = batch.priorities if self.config.prioritized_replay else 1.0
+        priorities = batch.probabilities if self.config.prioritized_replay else 1.0
 
         importance_weights = 1.0 / priorities
         importance_weights **= self._beta_schedule(train_state.train_step)

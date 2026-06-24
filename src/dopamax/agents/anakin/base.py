@@ -322,6 +322,10 @@ class AnakinAgent(Agent, ABC):
             msg = "num_iterations must be a multiple of callback_freq."
             raise ValueError(msg)
 
+        if num_iterations // callback_freq <= 0:
+            msg = "num_iterations must be greater than callback_freq."
+            raise ValueError(msg)
+
         pbar = tqdm(total=num_iterations, desc="Training")
         callbacks = callbacks or []
 
@@ -329,7 +333,9 @@ class AnakinAgent(Agent, ABC):
         initial_train_state_fn = self.initial_train_state
 
         init_consistent_key, init_divergent_key = jax.random.split(key)
-        init_divergent_key = jax.random.split(key, self.config.num_envs_per_device * self.config.num_devices)
+        init_divergent_key = jax.random.split(
+            init_divergent_key, self.config.num_envs_per_device * self.config.num_devices
+        )
         init_divergent_key = jnp.reshape(
             init_divergent_key, (self.config.num_devices, self.config.num_envs_per_device, 2)
         )
@@ -358,10 +364,6 @@ class AnakinAgent(Agent, ABC):
             init_divergent_key = jnp.squeeze(init_divergent_key, axis=0)
 
         train_state = initial_train_state_fn(init_consistent_key, init_divergent_key)
-
-        if (num_iterations // callback_freq) <= 0:
-            msg = "num_iterations must be greater than callback_freq."
-            raise ValueError(msg)
 
         for _ in range(num_iterations // callback_freq):
             train_state, metrics = jax.device_get(train_fn(train_state))

@@ -13,8 +13,6 @@ from dopamax.typing import Action
 
 @dataclass(frozen=True)
 class PGXEnvState(EnvState):
-    episode_reward: float
-    episode_length: float
     pgx_state: pgx.State
 
 

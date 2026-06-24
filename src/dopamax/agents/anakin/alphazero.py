@@ -244,7 +244,7 @@ class AlphaZero(AnakinAgent):
             if deterministic:
                 return pi.mode()
             else:
-                return pi.sample(key=key)
+                return pi.sample(seed=search_key)
 
         root = mctx.RootFnOutput(prior_logits=pi.logits, value=value, embedding=env_state)
 

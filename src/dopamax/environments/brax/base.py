@@ -12,8 +12,6 @@ from dopamax.typing import Action
 
 @dataclass(frozen=True)
 class BraxEnvState(EnvState):
-    episode_reward: float
-    episode_length: float
     brax_state: brax_envs.State
     time: int
 

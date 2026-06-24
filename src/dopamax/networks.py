@@ -194,7 +194,7 @@ def get_actor_critic_model_fn(
     Example:
         >>> from dopamax.networks import get_network_build_fn, get_actor_critic_model_fn
         >>> from dopamax.spaces import Discrete
-        >>> 
+        >>>
         >>> action_space = Discrete(4)
         >>> network_build_fn = get_network_build_fn("mlp", hidden_units=[64, 64])
         >>> model_fn = get_actor_critic_model_fn(action_space, network_build_fn, value_network="copy")
@@ -370,7 +370,7 @@ def get_continuous_q_network_model_fn(
             latent = base_net(jnp.concatenate([observations, actions], axis=-1))
         else:
             latent = base_net(observations)
-            latent = jnp.concatenate([latent, actions])
+            latent = jnp.concatenate([latent, actions], axis=-1)
 
         return jnp.squeeze(output_net(latent), axis=-1)
 

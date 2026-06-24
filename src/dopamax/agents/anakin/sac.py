@@ -151,12 +151,11 @@ class SAC(AnakinAgent):
                 pi.sample(seed=sample_key),
             )
 
+            # The entropy log-prob must use the tanh-space (pre-rescale) action.
             log_probs = pi.log_prob(actions)
 
             if not self._discrete:
-                actions = ((actions + 1.0) / 2.0 + self._action_space_low) * (
-                    self._action_space_high - self._action_space_low
-                )
+                actions = self._rescale(actions)
 
             return actions, {SampleBatch.ACTION_LOGP: log_probs}
 
@@ -212,6 +211,10 @@ class SAC(AnakinAgent):
         config.update(_DEFAULT_SAC_CONFIG)
         return config
 
+    def _rescale(self, action: Action) -> Action:
+        """Affinely maps a tanh-squashed continuous action from [-1, 1] to the env's [low, high] bounds."""
+        return self._action_space_low + (action + 1.0) / 2.0 * (self._action_space_high - self._action_space_low)
+
     def compute_action(
         self,
         params: hk.Params,
@@ -233,12 +236,16 @@ class SAC(AnakinAgent):
         """
         sample_key, model_key = jax.random.split(key)
 
-        pi = self._actor.apply(params["online"], model_key, observation)
+        pi = self._actor.apply(params["online"]["actor"], model_key, observation)
 
         if deterministic:
             action = pi.mode() if self._discrete else pi.mean()
         else:
             action = pi.sample(seed=sample_key)
+
+        # Match the rollout convention: continuous actions are rescaled from tanh space to the env bounds.
+        if not self._discrete:
+            action = self._rescale(action)
 
         return action
 
@@ -305,8 +312,10 @@ class SAC(AnakinAgent):
             q2_values = jnp.take_along_axis(q2_values, jnp.expand_dims(actions, axis=-1), axis=-1).squeeze(-1)
         else:
             next_actions, next_logpacs = next_pi.sample_and_log_prob(seed=sample_key)
+            # The critic operates in the env action scale (the buffer stores rescaled actions), so rescale the
+            # tanh-space next actions before evaluating Q, but keep the tanh-space log-prob for the entropy term.
             q_targets = jnp.minimum(
-                *self._critic.apply(target_critic_params, target_critic_key, next_obs, next_actions)
+                *self._critic.apply(target_critic_params, target_critic_key, next_obs, self._rescale(next_actions))
             )
             backup = rewards + self.config.gamma * discounts * (q_targets - alpha * next_logpacs)
             q1_values, q2_values = self._critic.apply(online_critic_params, critic_key, obs, actions)
@@ -338,13 +347,22 @@ class SAC(AnakinAgent):
             )
         else:
             actions, log_pacs = pi.sample_and_log_prob(seed=sample_key)
-            q_targets = jnp.minimum(*self._critic.apply(online_critic_params, critic_key, obs, actions))
+            # Feed env-scaled actions to the critic; keep the tanh-space log-prob for the entropy term.
+            q_targets = jnp.minimum(*self._critic.apply(online_critic_params, critic_key, obs, self._rescale(actions)))
             actor_loss = jnp.mean(alpha * log_pacs - q_targets)
 
         return actor_loss, {"actor_loss": actor_loss, "log_pacs": log_pacs}
 
     def _alpha_loss(self, log_alpha, log_pacs):
-        loss = jnp.mean(jnp.sum(jnp.exp(log_pacs) * (-log_alpha * log_pacs + self._target_entropy), axis=-1))
+        # Temperature objective: minimize -log_alpha * (log_pi + target_entropy), so the gradient w.r.t. log_alpha is
+        # proportional to (target_entropy - current_entropy), raising alpha when entropy is below target. log_pacs is a
+        # constant here (it arrives from the actor's aux output), so this is differentiated only w.r.t. log_alpha.
+        if self._discrete:
+            # log_pacs: [batch, n] log-probabilities; weight each action by pi(a) = exp(log_pacs).
+            loss = jnp.mean(jnp.sum(jnp.exp(log_pacs) * (-log_alpha * (log_pacs + self._target_entropy)), axis=-1))
+        else:
+            # log_pacs: [batch] per-sample scalar log-prob.
+            loss = jnp.mean(-log_alpha * (log_pacs + self._target_entropy))
         return loss, {"alpha_loss": loss}
 
     def _update(self, train_step, params, opt_state, key, obs, actions, rewards, next_obs, discounts, weights):
@@ -436,7 +454,7 @@ class SAC(AnakinAgent):
 
         batch = self._buffer.sample(new_buffer_state, sample_key)
         sample = batch.experience
-        priorities = batch.priorities if self.config.prioritized_replay else 1.0
+        priorities = batch.probabilities if self.config.prioritized_replay else 1.0
 
         importance_weights = 1.0 / priorities
         importance_weights **= self._beta_schedule(train_state.train_step)

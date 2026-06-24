@@ -28,6 +28,7 @@ def expand_apply(f):
     Returns:
       f, wrapped as described above.
     """
+
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         def expand(t):
@@ -40,9 +41,9 @@ def expand_apply(f):
         return jax.tree_util.tree_map(
             lambda t: t[0],
             outputs,
-            is_leaf=lambda o: isinstance(o, Distribution)
-            or jax.tree_util.treedef_is_leaf(jax.tree_util.tree_structure(o)),
+            is_leaf=lambda o: (
+                isinstance(o, Distribution) or jax.tree_util.treedef_is_leaf(jax.tree_util.tree_structure(o))
+            ),
         )
 
     return wrapper
-

@@ -44,4 +44,6 @@ def explained_variance(targets: Array, preds: Array, num_envs_per_device: int, n
     targets_var = targets_2e - targets_e2
     diff_var = diff_2e - diff_e2
 
-    return jnp.maximum(-1.0, 1 - (diff_var / targets_var))
+    # When target variance is ~0 (e.g. constant returns), the ratio is 0/0 -> NaN, and jnp.maximum does not clamp NaN.
+    # Return 0.0 (no explained variance) in that degenerate case instead of poisoning the logged metric.
+    return jnp.where(targets_var > 1e-8, jnp.maximum(-1.0, 1 - (diff_var / targets_var)), 0.0)

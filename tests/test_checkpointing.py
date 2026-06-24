@@ -94,4 +94,3 @@ def test_checkpoint_nonexistent_file():
 
         with pytest.raises(FileNotFoundError):
             load_params(nonexistent)
-

@@ -132,4 +132,3 @@ def test_agent_initial_train_state():
     assert train_state.train_step == 0
     assert train_state.total_timesteps == 0
     assert train_state.total_episodes == 0
-

@@ -13,7 +13,7 @@ _NAME = "brax:InvertedPendulum"
 @dataclass(frozen=True)
 class InvertedPendulum(BraxEnvironment):
     def __init__(self):
-        brax_env = brax_envs.create("inverted_double_pendulum", auto_reset=False)
+        brax_env = brax_envs.create("inverted_pendulum", auto_reset=False)
         super(InvertedPendulum, self).__init__(_brax_env=brax_env)
 
     @property
@@ -30,4 +30,4 @@ class InvertedPendulum(BraxEnvironment):
 
     @property
     def action_space(self) -> Space:
-        return Box(low=-3.0, high=3.0, shape=(1,))
+        return Box(low=-1.0, high=1.0, shape=(1,))

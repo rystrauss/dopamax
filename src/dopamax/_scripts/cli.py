@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import os
 import pickle
 import random
@@ -96,7 +97,12 @@ def train(config, offline, profiler_port):
 
 
 @cli.command(short_help="Evaluate an agent.")
-@click.option("--agent_artifact", type=click.STRING, required=True, help="Path to the agent's config YAML file.")
+@click.option(
+    "--agent_artifact",
+    type=click.STRING,
+    required=True,
+    help="W&B artifact reference for the trained agent (e.g. entity/project/<env_name>-<agent_name>-agent:version).",
+)
 @click.option("--num_episodes", type=click.INT, required=True, help="The number of episodes to evaluate.")
 @click.option(
     "--render",
@@ -105,7 +111,13 @@ def train(config, offline, profiler_port):
     help="Whether to render the episodes. Note that this will usually significantly slow down the evaluation process, "
     "since environment rendering is not a pure JAX function and requires callbacks to the host.",
 )
-def evaluate(agent_artifact, num_episodes, render):
+@click.option(
+    "--seed",
+    type=click.INT,
+    default=None,
+    help="Random seed for reproducible evaluation. Randomly drawn if not provided.",
+)
+def evaluate(agent_artifact, num_episodes, render, seed):
     """Evaluates a trained agent and logs the results to W&B."""
     run = wandb.init(project="dopamax", job_type="evaluate", config={"num_episodes": num_episodes})
     artifact = run.use_artifact(agent_artifact, type="agent")
@@ -123,23 +135,44 @@ def evaluate(agent_artifact, num_episodes, render):
     with open(params_path, "rb") as f:
         params = pickle.load(f)
 
-    rollout_fn = jax.jit(rollout_episode, static_argnums=(0, 1, 4))
+    # Some agents (e.g. AlphaZero) require the environment state in compute_action to seed their search.
+    needs_env_state = "env_state" in inspect.signature(agent.compute_action).parameters
 
-    def policy_fn(params: hk.Params, key: PRNGKey, observation: Observation):
-        return hk.expand_apply(partial(agent.compute_action, params, key))(observation), {}
+    rollout_fn = jax.jit(rollout_episode, static_argnums=(0, 1, 4, 5))
 
-    prng = hk.PRNGSequence(random.randint(0, 2**32 - 1))
+    if needs_env_state:
+
+        def policy_fn(params: hk.Params, key: PRNGKey, observation: Observation, env_state):
+            action = hk.expand_apply(lambda obs, es: agent.compute_action(params, key, obs, es))(observation, env_state)
+            return action, {}
+    else:
+
+        def policy_fn(params: hk.Params, key: PRNGKey, observation: Observation):
+            return hk.expand_apply(partial(agent.compute_action, params, key))(observation), {}
+
+    if seed is None:
+        seed = random.randint(0, 2**32 - 1)
+    run.config["eval_seed"] = seed
+    prng = hk.PRNGSequence(seed)
 
     rewards, lengths, renders = [], [], []
 
     for _ in tqdm(range(num_episodes), unit="episodes"):
-        rollout_data = rollout_fn(env, policy_fn, params, prng.next(), return_env_states=render)
-        rewards.append(rollout_data[SampleBatch.EPISODE_REWARD][-1])
-        lengths.append(rollout_data[SampleBatch.EPISODE_LENGTH][-1])
+        rollout_data = rollout_fn(
+            env, policy_fn, params, prng.next(), return_env_states=render, pass_env_state_to_policy=needs_env_state
+        )
+
+        # rollout_episode scans the full horizon and (for auto-resetting envs) may contain multiple episodes; read the
+        # accumulators at the FIRST terminal step so we report the first episode's return/length, not a sum. Falls
+        # back to the last step when the episode never terminates within max_episode_length.
+        step_types = np.asarray(rollout_data[SampleBatch.STEP_TYPE])
+        last_indices = np.argwhere(step_types == StepType.LAST)
+        first_last = int(last_indices[0][0]) if len(last_indices) else -1
+        rewards.append(rollout_data[SampleBatch.EPISODE_REWARD][first_last])
+        lengths.append(rollout_data[SampleBatch.EPISODE_LENGTH][first_last])
 
         if render:
-            last_index = np.argwhere(rollout_data[SampleBatch.STEP_TYPE] == StepType.LAST)[0][0]
-            env_states = jax.tree.map(lambda x: x[: last_index + 1], rollout_data[SampleBatch.ENVIRONMENT_STATE])
+            env_states = jax.tree.map(lambda x: x[: first_last + 1], rollout_data[SampleBatch.ENVIRONMENT_STATE])
             renders.append(render_trajectory(env, env_states))
 
     to_log = {

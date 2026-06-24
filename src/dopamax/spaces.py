@@ -78,8 +78,12 @@ class Discrete(Space):
     def sample(self, key: PRNGKey) -> ArrayTree:
         return jax.random.choice(key, self._n).astype(self.dtype)
 
-    def contains(self, item: ArrayTree) -> bool:
-        return jnp.ndim(item) == 0 and 0 <= item < self._n
+    def contains(self, item: ArrayTree) -> Array:
+        # Combine array-valued comparisons with jnp.logical_and (not Python `and`/chained comparison) so contains()
+        # is usable inside jit/vmap. jnp.ndim is a static (trace-time) check.
+        if jnp.ndim(item) != 0:
+            return jnp.array(False)
+        return jnp.logical_and(item >= 0, item < self._n)
 
     @property
     def n(self) -> int:
@@ -136,11 +140,13 @@ class Box(Space):
         return self._high
 
     @property
-    def bounded_below(self) -> bool:
+    def bounded_below(self) -> Array:
+        """Element-wise boolean array (one entry per dimension) indicating whether each lower bound is finite."""
         return -jnp.inf < self.low
 
     @property
-    def bounded_above(self) -> bool:
+    def bounded_above(self) -> Array:
+        """Element-wise boolean array (one entry per dimension) indicating whether each upper bound is finite."""
         return jnp.inf > self.high
 
     @property
@@ -153,10 +159,15 @@ class Box(Space):
         lower_bounded = self.bounded_below & ~self.bounded_above
         bounded = self.bounded_below & self.bounded_above
 
+        # For integer dtypes the result is floored below, and uniform is half-open [low, high); extend the bounded
+        # maxval by 1 so the inclusive upper bound `high` is reachable (and consistent with contains()).
+        is_int = jnp.dtype(self.dtype).kind == "i"
+        bounded_maxval = self.high + 1 if is_int else self.high
+
         sample_unbounded = jax.random.normal(key, shape=self.shape)
         sample_lower_bounded = jax.random.exponential(key, shape=self.shape) + self.low
         sample_upper_bounded = -jax.random.exponential(key, shape=self.shape) + self.high
-        sample_bounded = jax.random.uniform(key, shape=self.shape, minval=self.low, maxval=self.high)
+        sample_bounded = jax.random.uniform(key, shape=self.shape, minval=self.low, maxval=bounded_maxval)
 
         sample = jnp.sum(
             jnp.stack(
@@ -175,22 +186,19 @@ class Box(Space):
 
         return sample.astype(self.dtype)
 
-    def contains(self, item: ArrayTree) -> bool:
-        return bool(
-            jnp.can_cast(item.dtype, self.dtype)
-            and item.shape == self.shape
-            and jnp.all(item >= self.low)
-            and jnp.all(item <= self.high)
-        )
+    def contains(self, item: ArrayTree) -> Array:
+        # dtype/shape are static (trace-time) checks; combine the array-valued bound checks with jnp.logical_and
+        # (not Python `and`/bool()) so contains() is usable inside jit/vmap.
+        if not (jnp.can_cast(item.dtype, self.dtype) and item.shape == self.shape):
+            return jnp.array(False)
+        return jnp.logical_and(jnp.all(item >= self.low), jnp.all(item <= self.high))
 
     def __repr__(self):
         return f"Box(low={self.low}, high={self.high})"
 
     def __eq__(self, other: typing.Any) -> bool:
         return (
-            isinstance(other, Box)
-            and jnp.array_equal(self.low, other.low)
-            and jnp.array_equal(self.high, other.high)
+            isinstance(other, Box) and jnp.array_equal(self.low, other.low) and jnp.array_equal(self.high, other.high)
         )
 
 
@@ -218,8 +226,8 @@ class Dict(Space):
         sample_keys = jax.random.split(key, len(self.spaces))
         return OrderedDict([(k, self.spaces[k].sample(sample_keys[i])) for i, k in enumerate(self.spaces)])
 
-    def contains(self, item: ArrayTree) -> bool:
-        out_of_space = 0
+    def contains(self, item: ArrayTree) -> Array:
+        result = jnp.array(True)
         for k, space in self.spaces.items():
-            out_of_space += 1 - space.contains(item[k])
-        return out_of_space == 0
+            result = jnp.logical_and(result, space.contains(item[k]))
+        return result
